@@ -2,392 +2,100 @@
 #include "side.hpp"
 #include <array>
 
-static constexpr std::array<Bitboard, 64> knight_moves = {0X20400,
-                                                          0X50800,
-                                                          0XA1100,
-                                                          0X142200,
-                                                          0X284400,
-                                                          0X508800,
-                                                          0XA01000,
-                                                          0X402000,
-                                                          0X2040004,
-                                                          0X5080008,
-                                                          0XA110011,
-                                                          0X14220022,
-                                                          0X28440044,
-                                                          0X50880088,
-                                                          0XA0100010,
-                                                          0X40200020,
-                                                          0X204000402,
-                                                          0X508000805,
-                                                          0XA1100110A,
-                                                          0X1422002214,
-                                                          0X2844004428,
-                                                          0X5088008850,
-                                                          0XA0100010A0,
-                                                          0X4020002040,
-                                                          0X20400040200,
-                                                          0X50800080500,
-                                                          0XA1100110A00,
-                                                          0X142200221400,
-                                                          0X284400442800,
-                                                          0X508800885000,
-                                                          0XA0100010A000,
-                                                          0X402000204000,
-                                                          0X2040004020000,
-                                                          0X5080008050000,
-                                                          0XA1100110A0000,
-                                                          0X14220022140000,
-                                                          0X28440044280000,
-                                                          0X50880088500000,
-                                                          0XA0100010A00000,
-                                                          0X40200020400000,
-                                                          0X204000402000000,
-                                                          0X508000805000000,
-                                                          0XA1100110A000000,
-                                                          0X1422002214000000,
-                                                          0X2844004428000000,
-                                                          0X5088008850000000,
-                                                          0XA0100010A0000000,
-                                                          0X4020002040000000,
-                                                          0X400040200000000,
-                                                          0X800080500000000,
-                                                          0X1100110A00000000,
-                                                          0X2200221400000000,
-                                                          0X4400442800000000,
-                                                          0X8800885000000000,
-                                                          0X100010A000000000,
-                                                          0X2000204000000000,
-                                                          0X4020000000000,
-                                                          0X8050000000000,
-                                                          0X110A0000000000,
-                                                          0X22140000000000,
-                                                          0X44280000000000,
-                                                          0X88500000000000,
-                                                          0X10A00000000000,
-                                                          0X20400000000000};
+inline constexpr std::array<Bitboard, 8> file_masks = []() {
+  std::array<Bitboard, 8> file_masks;
 
-static constexpr std::array<Bitboard, 64> king_moves = {0X302,
-                                                        0X705,
-                                                        0XE0A,
-                                                        0X1C14,
-                                                        0X3828,
-                                                        0X7050,
-                                                        0XE0A0,
-                                                        0XC040,
-                                                        0X30203,
-                                                        0X70507,
-                                                        0XE0A0E,
-                                                        0X1C141C,
-                                                        0X382838,
-                                                        0X705070,
-                                                        0XE0A0E0,
-                                                        0XC040C0,
-                                                        0X3020300,
-                                                        0X7050700,
-                                                        0XE0A0E00,
-                                                        0X1C141C00,
-                                                        0X38283800,
-                                                        0X70507000,
-                                                        0XE0A0E000,
-                                                        0XC040C000,
-                                                        0X302030000,
-                                                        0X705070000,
-                                                        0XE0A0E0000,
-                                                        0X1C141C0000,
-                                                        0X3828380000,
-                                                        0X7050700000,
-                                                        0XE0A0E00000,
-                                                        0XC040C00000,
-                                                        0X30203000000,
-                                                        0X70507000000,
-                                                        0XE0A0E000000,
-                                                        0X1C141C000000,
-                                                        0X382838000000,
-                                                        0X705070000000,
-                                                        0XE0A0E0000000,
-                                                        0XC040C0000000,
-                                                        0X3020300000000,
-                                                        0X7050700000000,
-                                                        0XE0A0E00000000,
-                                                        0X1C141C00000000,
-                                                        0X38283800000000,
-                                                        0X70507000000000,
-                                                        0XE0A0E000000000,
-                                                        0XC040C000000000,
-                                                        0X302030000000000,
-                                                        0X705070000000000,
-                                                        0XE0A0E0000000000,
-                                                        0X1C141C0000000000,
-                                                        0X3828380000000000,
-                                                        0X7050700000000000,
-                                                        0XE0A0E00000000000,
-                                                        0XC040C00000000000,
-                                                        0X203000000000000,
-                                                        0X507000000000000,
-                                                        0XA0E000000000000,
-                                                        0X141C000000000000,
-                                                        0X2838000000000000,
-                                                        0X5070000000000000,
-                                                        0XA0E0000000000000,
-                                                        0X40C0000000000000};
+  for (uint8_t file = 0; file < 8; ++file)
+    file_masks[file] = 0x0101010101010101ULL << file;
 
-static constexpr std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_moves = {
-    {0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X1010000,
-     0X2020000,
-     0X4040000,
-     0X8080000,
-     0X10100000,
-     0X20200000,
-     0X40400000,
-     0X80800000,
-     0X1000000,
-     0X2000000,
-     0X4000000,
-     0X8000000,
-     0X10000000,
-     0X20000000,
-     0X40000000,
-     0X80000000,
-     0X100000000,
-     0X200000000,
-     0X400000000,
-     0X800000000,
-     0X1000000000,
-     0X2000000000,
-     0X4000000000,
-     0X8000000000,
-     0X10000000000,
-     0X20000000000,
-     0X40000000000,
-     0X80000000000,
-     0X100000000000,
-     0X200000000000,
-     0X400000000000,
-     0X800000000000,
-     0X1000000000000,
-     0X2000000000000,
-     0X4000000000000,
-     0X8000000000000,
-     0X10000000000000,
-     0X20000000000000,
-     0X40000000000000,
-     0X80000000000000,
-     0X100000000000000,
-     0X200000000000000,
-     0X400000000000000,
-     0X800000000000000,
-     0X1000000000000000,
-     0X2000000000000000,
-     0X4000000000000000,
-     0X8000000000000000,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X1,
-     0X2,
-     0X4,
-     0X8,
-     0X10,
-     0X20,
-     0X40,
-     0X80,
-     0X100,
-     0X200,
-     0X400,
-     0X800,
-     0X1000,
-     0X2000,
-     0X4000,
-     0X8000,
-     0X10000,
-     0X20000,
-     0X40000,
-     0X80000,
-     0X100000,
-     0X200000,
-     0X400000,
-     0X800000,
-     0X1000000,
-     0X2000000,
-     0X4000000,
-     0X8000000,
-     0X10000000,
-     0X20000000,
-     0X40000000,
-     0X80000000,
-     0X100000000,
-     0X200000000,
-     0X400000000,
-     0X800000000,
-     0X1000000000,
-     0X2000000000,
-     0X4000000000,
-     0X8000000000,
-     0X10100000000,
-     0X20200000000,
-     0X40400000000,
-     0X80800000000,
-     0X101000000000,
-     0X202000000000,
-     0X404000000000,
-     0X808000000000,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0,
-     0X0}};
+  return file_masks;
+}();
 
-static constexpr std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_attacks =
-    {{0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X20000,
-      0X50000,
-      0XA0000,
-      0X140000,
-      0X280000,
-      0X500000,
-      0XA00000,
-      0X400000,
-      0X2000000,
-      0X5000000,
-      0XA000000,
-      0X14000000,
-      0X28000000,
-      0X50000000,
-      0XA0000000,
-      0X40000000,
-      0X200000000,
-      0X500000000,
-      0XA00000000,
-      0X1400000000,
-      0X2800000000,
-      0X5000000000,
-      0XA000000000,
-      0X4000000000,
-      0X20000000000,
-      0X50000000000,
-      0XA0000000000,
-      0X140000000000,
-      0X280000000000,
-      0X500000000000,
-      0XA00000000000,
-      0X400000000000,
-      0X2000000000000,
-      0X5000000000000,
-      0XA000000000000,
-      0X14000000000000,
-      0X28000000000000,
-      0X50000000000000,
-      0XA0000000000000,
-      0X40000000000000,
-      0X200000000000000,
-      0X500000000000000,
-      0XA00000000000000,
-      0X1400000000000000,
-      0X2800000000000000,
-      0X5000000000000000,
-      0XA000000000000000,
-      0X4000000000000000,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X2,
-      0X5,
-      0XA,
-      0X14,
-      0X28,
-      0X50,
-      0XA0,
-      0X40,
-      0X200,
-      0X500,
-      0XA00,
-      0X1400,
-      0X2800,
-      0X5000,
-      0XA000,
-      0X4000,
-      0X20000,
-      0X50000,
-      0XA0000,
-      0X140000,
-      0X280000,
-      0X500000,
-      0XA00000,
-      0X400000,
-      0X2000000,
-      0X5000000,
-      0XA000000,
-      0X14000000,
-      0X28000000,
-      0X50000000,
-      0XA0000000,
-      0X40000000,
-      0X200000000,
-      0X500000000,
-      0XA00000000,
-      0X1400000000,
-      0X2800000000,
-      0X5000000000,
-      0XA000000000,
-      0X4000000000,
-      0X20000000000,
-      0X50000000000,
-      0XA0000000000,
-      0X140000000000,
-      0X280000000000,
-      0X500000000000,
-      0XA00000000000,
-      0X400000000000,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0,
-      0X0}};
+inline constexpr std::array<Bitboard, 8> rank_masks = []() {
+  std::array<Bitboard, 8> rank_masks;
+
+  for (uint8_t rank = 0; rank < 8; ++rank)
+    rank_masks[rank] = 0xFFULL << (8 * rank);
+
+  return rank_masks;
+}();
+
+inline constexpr std::array<Bitboard, 64> knight_moves = []() {
+  std::array<Bitboard, 64> knight_moves;
+
+  for (uint8_t pos = 0; pos < 64; ++pos) {
+    Bitboard bitboard = 1ULL << pos;
+
+    knight_moves[pos] =
+        ((bitboard & ~(file_masks[0] | rank_masks[6] | rank_masks[7])) << 15) |
+        ((bitboard & ~(file_masks[7] | rank_masks[6] | rank_masks[7])) << 17) |
+        ((bitboard & ~(file_masks[7] | rank_masks[0] | rank_masks[1])) >> 15) |
+        ((bitboard & ~(file_masks[0] | rank_masks[0] | rank_masks[1])) >> 17) |
+        ((bitboard & ~(rank_masks[7] | file_masks[0] | file_masks[1])) << 6) |
+        ((bitboard & ~(rank_masks[0] | file_masks[0] | file_masks[1])) >> 10) |
+        ((bitboard & ~(rank_masks[0] | file_masks[6] | file_masks[7])) >> 6) |
+        ((bitboard & ~(rank_masks[7] | file_masks[6] | file_masks[7])) << 10);
+  }
+
+  return knight_moves;
+}();
+
+inline constexpr std::array<Bitboard, 64> king_moves = []() {
+  std::array<Bitboard, 64> king_moves;
+
+  for (uint8_t pos = 0; pos < 64; ++pos) {
+    Bitboard bitboard = 1ULL << pos;
+    king_moves[pos] = ((bitboard & ~(rank_masks[0] | file_masks[0])) >> 9) |
+                      ((bitboard & ~(rank_masks[0] | file_masks[7])) >> 7) |
+                      ((bitboard & ~(rank_masks[7] | file_masks[0])) << 7) |
+                      ((bitboard & ~(rank_masks[7] | file_masks[7])) << 9) |
+                      ((bitboard & ~file_masks[0]) >> 1) |
+                      ((bitboard & ~file_masks[7]) << 1) |
+                      ((bitboard & ~rank_masks[0]) >> 8) |
+                      ((bitboard & ~rank_masks[7]) << 8);
+  }
+
+  return king_moves;
+}();
+
+inline constexpr std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_moves =
+    []() {
+      std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_moves = {};
+
+      for (uint8_t pos = 0; pos < 64; ++pos) {
+        Bitboard bitboard = 1ULL << pos;
+
+        pawn_moves[WHITE][pos] =
+            ((bitboard & ~(rank_masks[0] | rank_masks[7])) << 8) |
+            ((bitboard & rank_masks[1]) << 16);
+
+        pawn_moves[BLACK][pos] =
+            ((bitboard & ~(rank_masks[0] | rank_masks[7])) >> 8) |
+            ((bitboard & rank_masks[6]) >> 16);
+      }
+
+      return pawn_moves;
+    }();
+
+inline constexpr std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_attacks =
+    []() {
+      std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_attacks = {};
+
+      for (uint8_t pos = 0; pos < 64; ++pos) {
+        Bitboard bitboard = 1ULL << pos;
+
+        pawn_attacks[WHITE][pos] =
+            ((bitboard & ~(rank_masks[0] | rank_masks[7] | file_masks[0]))
+             << 7) |
+            ((bitboard & ~(rank_masks[0] | rank_masks[7] | file_masks[7]))
+             << 9);
+
+        pawn_attacks[BLACK][pos] =
+            ((bitboard & ~(rank_masks[0] | rank_masks[7] | file_masks[0])) >>
+             9) |
+            ((bitboard & ~(rank_masks[0] | rank_masks[7] | file_masks[7])) >>
+             7);
+      }
+
+      return pawn_attacks;
+    }();
