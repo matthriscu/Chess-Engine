@@ -5,13 +5,16 @@ CXXFLAGS = -std=c++23 -Wall -Wextra -O3
 # Files
 SRC_FILES = $(wildcard *.cpp)
 OBJ_FILES = $(SRC_FILES:.cpp=.o)
-EXE = my_program
+EXE = main
 
 # Header files (that may not have a matching .cpp file)
 HEADER_FILES = $(wildcard *.hpp)
 
 # Default target
 all: $(EXE)
+
+run: $(EXE)
+	./$(EXE)
 
 # Linking the final executable
 $(EXE): $(OBJ_FILES)

@@ -1,6 +1,22 @@
-#include "helper.hpp"
-#include "side.hpp"
+#pragma once
+
 #include <array>
+#include <cstdint>
+
+using Bitboard = uint64_t;
+
+enum Side : uint8_t { WHITE, BLACK, NUM_SIDES, ALL_SIDES = NUM_SIDES };
+
+enum Piece : uint8_t {
+  PAWN,
+  KNIGHT,
+  BISHOP,
+  ROOK,
+  QUEEN,
+  KING,
+  NUM_PIECES,
+  ALL_PIECES = NUM_PIECES
+};
 
 inline constexpr std::array<Bitboard, 8> file_masks = []() {
   std::array<Bitboard, 8> file_masks;

@@ -2,7 +2,6 @@
 
 #include "helper.hpp"
 #include "move.hpp"
-#include "piece.hpp"
 #include <cstdint>
 #include <print>
 #include <string>
