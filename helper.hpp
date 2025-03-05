@@ -2,6 +2,10 @@
 
 #include "constants.hpp"
 
+constexpr auto square_to_rank(auto square) { return square / 8; }
+
+constexpr auto square_to_file(auto square) { return square % 8; }
+
 constexpr Bitboard get_square_index(auto rank, auto file) {
   return 8 * rank + file;
 }

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <ranges>
 
 using Bitboard = uint64_t;
 
@@ -36,7 +37,10 @@ inline constexpr std::array<Bitboard, 8> rank_masks = []() {
   return rank_masks;
 }();
 
-inline constexpr std::array<Bitboard, 64> knight_moves = []() {
+template <Piece> inline constexpr std::array<Bitboard, 64> attacks_bb{};
+
+template <>
+inline constexpr std::array<Bitboard, 64> attacks_bb<KNIGHT> = []() {
   std::array<Bitboard, 64> knight_moves;
 
   for (uint8_t pos = 0; pos < 64; ++pos) {
@@ -56,7 +60,8 @@ inline constexpr std::array<Bitboard, 64> knight_moves = []() {
   return knight_moves;
 }();
 
-inline constexpr std::array<Bitboard, 64> king_moves = []() {
+template <>
+inline constexpr std::array<Bitboard, 64> attacks_bb<KING> = []() {
   std::array<Bitboard, 64> king_moves;
 
   for (uint8_t pos = 0; pos < 64; ++pos) {
@@ -72,6 +77,19 @@ inline constexpr std::array<Bitboard, 64> king_moves = []() {
   }
 
   return king_moves;
+}();
+
+template <Piece> inline constexpr std::array<Bitboard, 64> relevant_occupancy{};
+
+template <>
+inline constexpr std::array<Bitboard, 64> relevant_occupancy<ROOK> = []() {
+  std::array<Bitboard, 64> ans;
+
+  for (uint8_t square = 0; square < 64; ++square)
+    ans[square] = (rank_masks[square / 8] & ~(file_masks[0] | file_masks[7])) |
+                  (file_masks[square % 8] & ~(rank_masks[0] | rank_masks[7]));
+
+  return ans;
 }();
 
 inline constexpr std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_moves =

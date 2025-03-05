@@ -8,7 +8,8 @@
 #include <vector>
 
 struct Board {
-  std::array<std::array<Bitboard, NUM_PIECES + 1>, NUM_SIDES + 1> pieces{};
+  std::array<std::array<Bitboard, NUM_PIECES>, NUM_SIDES> pieces{};
+  std::array<Bitboard, NUM_SIDES + 1> all_pieces{};
   std::array<std::array<std::pair<Piece, Side>, 8>, 8> square_to_piece{};
 
   uint8_t halfmove_clock = 0, en_passant_file = 0;
@@ -43,6 +44,8 @@ struct Board {
         const Side side = 'A' <= c && c <= 'Z' ? WHITE : BLACK;
 
         pieces[side][piece] |= get_bit(rank, file);
+        all_pieces[side] |= get_bit(rank, file);
+        all_pieces[ALL_SIDES] |= get_bit(rank, file);
         square_to_piece[rank][file] = std::make_pair(piece, side);
 
         ++file;
@@ -57,7 +60,7 @@ struct Board {
     halfmove_clock = std::stoul(tokens[4]);
   }
 
-  std::vector<Move> generate_moves();
+  // std::vector<Move> generate_moves();
 };
 
 template <> struct std::formatter<Board> {
