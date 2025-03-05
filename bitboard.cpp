@@ -1,4 +1,4 @@
-#include "helper.hpp"
+#include "bitboard.hpp"
 #include <print>
 
 void print_bitboard(Bitboard bitboard) {
@@ -8,8 +8,7 @@ void print_bitboard(Bitboard bitboard) {
     std::print("\t{}\t", rank);
 
     for (uint8_t file = 0; file < 8; ++file)
-      std::print("{} ",
-                 static_cast<Bitboard>((bitboard & get_bit(rank, file)) != 0));
+      std::print("{:d} ", (bitboard & get_bit(rank, file)) != 0);
 
     std::println("\t{}", rank);
   }

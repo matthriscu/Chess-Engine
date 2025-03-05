@@ -1,20 +1,18 @@
+#include "types.hpp"
 #include <cstdint>
 
+enum Special : uint8_t { NOT_SPECIAL, PROMOTION, EN_PASSANT, CASTLING };
+
 struct __attribute__((packed)) Move {
-  uint8_t from_file : 3;
-  uint8_t from_rank : 3;
-  uint8_t to_file : 3;
-  uint8_t to_rank : 3;
-  uint8_t promotion : 1;
-  uint8_t special : 2; // if promotion = 1
-                       // special = 0 == knight promotion
-                       // special = 1 == bishop promotion
-                       // special = 2 == rook promotion
-                       // special = 3 == queen promotion
-                       // else
-                       // special = 1 == king side castling
-                       // special = 2 == queen side castling
-                       // special = 3 == en passant
-  uint8_t capture : 1;
-  uint8_t captured_piece : 6;
+  uint8_t from : 6;
+  uint8_t to : 6;
+  uint8_t promoted_to_piece : 2;
+  uint8_t special : 2; // 1 - promotion, 2 - en_passant, 3 - castling
+
+  Move(Square from, Square to, Special special = NOT_SPECIAL)
+      : from(from), to(to), special(special) {}
+
+  Move(Square from, Square to, Piece promoted_to_piece)
+      : from(from), to(to), promoted_to_piece(promoted_to_piece - 1),
+        special(PROMOTION) {}
 };
