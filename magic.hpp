@@ -1,5 +1,6 @@
 #pragma once
     
+#include "types.hpp"
 #include <cstdint>
 
 inline constexpr uint64_t lookup_table[88507] = { 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull, 0x40a040400000ull, 0x40a040000000ull
@@ -707,7 +708,9 @@ struct FancyHash {
     const uint64_t hash;
 };
 
-inline constexpr FancyHash b_magics[64] = {
+template<Piece P> inline constexpr FancyHash magics[64] {};
+
+template<> inline constexpr FancyHash magics<BISHOP>[64] = {
     { lookup_table + 66157, 18428694421974023679ull, 1187473109101317119ull },
     { lookup_table + 71730, 18446673567257459711ull, 9223336714375004157ull },
     { lookup_table + 37781, 18446743798293722623ull, 288441550701068800ull },
@@ -773,7 +776,7 @@ inline constexpr FancyHash b_magics[64] = {
     { lookup_table + 76355, 18437719247841787903ull, 594615890450845658ull },
     { lookup_table + 11140, 18428694421974023679ull, 1152922330840178696ull },
 };
-inline constexpr FancyHash r_magics[64] = {
+template<> inline constexpr FancyHash magics<ROOK>[64] = {
     { lookup_table + 10890, 18446461494909402753ull, 9234631121814487039ull },
     { lookup_table + 56054, 18446178916109254019ull, 6916402019615277055ull },
     { lookup_table + 67495, 18445613758508956549ull, 18442234976255475711ull },
@@ -840,16 +843,24 @@ inline constexpr FancyHash r_magics[64] = {
     { lookup_table + 1009, 9331317138511593471ull, 562962977269890ull },
 };
 
-constexpr uint64_t get_rook_attacks(int s, uint64_t occ) {
-    FancyHash m = r_magics[s];
-    return m.attacks[((occ | m.mask) * m.hash) >> (64 - 12)];
+template<Piece P> inline constexpr uint8_t magic_shift_value = 0;
+template<> inline constexpr uint8_t magic_shift_value<ROOK> = 12;
+template<> inline constexpr uint8_t magic_shift_value<BISHOP> = 9;
+
+template<Piece P> constexpr Bitboard get_magic_attacks(Square square, Bitboard occupied) {
+  FancyHash m = magics<P>[square];
+  return m.attacks[((occupied | m.mask) * m.hash) >> (64 - magic_shift_value<P>)];
 }
 
-constexpr uint64_t get_bishop_attacks(int s, uint64_t occ) {
-    FancyHash m = b_magics[s];
-    return m.attacks[((occ | m.mask) * m.hash) >> (64 - 9)];
+template<> constexpr Bitboard get_magic_attacks<QUEEN>(Square square, Bitboard occupied) {
+  return get_magic_attacks<ROOK>(square, occupied) | get_magic_attacks<BISHOP>(square, occupied);
 }
 
-constexpr uint64_t get_queen_attacks(int s, uint64_t occ) {
-    return get_rook_attacks(s, occ) | get_bishop_attacks(s, occ);
+// Never used, suppressing pointless warnings
+template<> constexpr Bitboard get_magic_attacks<KNIGHT>(Square, Bitboard) {
+  return 0;
+}
+
+template<> constexpr Bitboard get_magic_attacks<KING>(Square, Bitboard) {
+  return 0;
 }

@@ -1,6 +1,4 @@
 #include "board.hpp"
-#include "helper.hpp"
-#include "magic.hpp"
 #include <print>
 
 int main() {
@@ -10,5 +8,5 @@ int main() {
   std::println("{}", board);
 
   print_bitboard(
-      get_queen_attacks(get_square_index(1, 0), board.all_pieces[ALL_SIDES]));
+      attacks_bb<QUEEN>(get_square(1, 0), board.all_pieces[ALL_SIDES]));
 }

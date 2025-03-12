@@ -1,7 +1,8 @@
 #pragma once
 
-#include "helper.hpp"
+#include "bitboard.hpp"
 #include "move.hpp"
+#include "types.hpp"
 #include <cstdint>
 #include <print>
 #include <string>
@@ -60,7 +61,80 @@ struct Board {
     halfmove_clock = std::stoul(tokens[4]);
   }
 
-  // std::vector<Move> generate_moves();
+  void make_move(Move move);
+  void unmake_move(Move move);
+
+  bool isAttacked(Square square) {
+    for (Piece p : {KNIGHT, BISHOP, ROOK, QUEEN, KING})
+      if (attacks_bb(p, square, all_pieces[ALL_SIDES]) &
+          pieces[opposite_side(side_to_move)][p])
+        return true;
+
+    // Opposite pawn attack mask gives exactly the squares an attacking pawn
+    // could be
+    return pawn_attacks[side_to_move][square] &
+           pieces[opposite_side(side_to_move)][PAWN];
+  }
+
+  bool isFree(Square square) { return all_pieces[ALL_SIDES] & get_bit(square); }
+
+  constexpr std::vector<Move> generate_moves() {
+    std::vector<Move> moves;
+
+    // "Regular" moves
+    for (Piece p : {KNIGHT, BISHOP, ROOK, QUEEN, KING}) {
+      Bitboard bb = pieces[side_to_move][p];
+
+      while (bb) {
+        Square from = pop_lsb(bb);
+        Bitboard attacks = attacks_bb(p, from, all_pieces[ALL_SIDES]) &
+                           ~pieces[side_to_move][ALL_PIECES];
+
+        while (attacks)
+          moves.emplace_back(from, pop_lsb(attacks));
+      }
+    }
+
+    // Castling
+    if (!isAttacked(e1)) {
+      if (side_to_move == WHITE) {
+        if (wk_castling && isFree(f1) && isFree(g1) &&
+            !(isAttacked(f1) || isAttacked(g1)))
+          moves.emplace_back(e1, g1, CASTLING);
+
+        if (wq_castling && isFree(b1) && isFree(c1) && isFree(d1) &&
+            !(isAttacked(b1) || isAttacked(c1) || isAttacked(d1)))
+          moves.emplace_back(e1, c1, CASTLING);
+      } else {
+        if (bk_castling && isFree(f8) && isFree(g8) &&
+            !(isAttacked(f8) || isAttacked(g8)))
+          moves.emplace_back(e8, g8, CASTLING);
+
+        if (bq_castling && isFree(b8) && isFree(c8) && isFree(d8) &&
+            !(isAttacked(b8) || isAttacked(c8) || isAttacked(d8)))
+          moves.emplace_back(e8, c8, CASTLING);
+      }
+    }
+
+    // Pawns + en passant
+    Bitboard bb = pieces[side_to_move][PAWN];
+
+    while (bb) {
+      Square from = pop_lsb(bb);
+
+      Bitboard pushes =
+          pawn_moves[side_to_move][from] &
+          ~(all_pieces[ALL_SIDES] |
+            (side_to_move == WHITE ? (isolate_rank(all_pieces[ALL_SIDES], 2) &
+                                      ~pieces[side_to_move][PAWN])
+                                         << 8
+                                   : (isolate_rank(all_pieces[ALL_SIDES], 5) &
+                                      ~pieces[side_to_move][PAWN]) >>
+                                         8));
+    }
+
+    return moves;
+  };
 };
 
 template <> struct std::formatter<Board> {
