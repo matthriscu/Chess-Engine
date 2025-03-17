@@ -322,7 +322,7 @@ template <> struct std::formatter<Board> {
     out = std::format_to(out, "\t\tA B C D E F G H\n");
 
     for (int8_t rank = 7; rank >= 0; --rank) {
-      out = std::format_to(out, "\t{}\t", rank);
+      out = std::format_to(out, "\t{}\t", rank + 1);
       for (uint8_t file = 0; file < 8; ++file)
         out = std::format_to(
             out, "{} ",
