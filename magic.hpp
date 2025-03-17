@@ -710,7 +710,7 @@ struct FancyHash {
 
 template<Piece P> inline constexpr FancyHash magics[64] {};
 
-template<> inline constexpr FancyHash magics<BISHOP>[64] = {
+template<> inline constexpr FancyHash magics<Piece::BISHOP>[64] = {
     { lookup_table + 66157, 18428694421974023679ull, 1187473109101317119ull },
     { lookup_table + 71730, 18446673567257459711ull, 9223336714375004157ull },
     { lookup_table + 37781, 18446743798293722623ull, 288441550701068800ull },
@@ -776,7 +776,7 @@ template<> inline constexpr FancyHash magics<BISHOP>[64] = {
     { lookup_table + 76355, 18437719247841787903ull, 594615890450845658ull },
     { lookup_table + 11140, 18428694421974023679ull, 1152922330840178696ull },
 };
-template<> inline constexpr FancyHash magics<ROOK>[64] = {
+template<> inline constexpr FancyHash magics<Piece::ROOK>[64] = {
     { lookup_table + 10890, 18446461494909402753ull, 9234631121814487039ull },
     { lookup_table + 56054, 18446178916109254019ull, 6916402019615277055ull },
     { lookup_table + 67495, 18445613758508956549ull, 18442234976255475711ull },
@@ -842,25 +842,3 @@ template<> inline constexpr FancyHash magics<ROOK>[64] = {
     { lookup_table + 8555, 13961088200148500479ull, 17182358461140924414ull },
     { lookup_table + 1009, 9331317138511593471ull, 562962977269890ull },
 };
-
-template<Piece P> inline constexpr uint8_t magic_shift_value = 0;
-template<> inline constexpr uint8_t magic_shift_value<ROOK> = 12;
-template<> inline constexpr uint8_t magic_shift_value<BISHOP> = 9;
-
-template<Piece P> constexpr Bitboard get_magic_attacks(Square square, Bitboard occupied) {
-  FancyHash m = magics<P>[square];
-  return m.attacks[((occupied | m.mask) * m.hash) >> (64 - magic_shift_value<P>)];
-}
-
-template<> constexpr Bitboard get_magic_attacks<QUEEN>(Square square, Bitboard occupied) {
-  return get_magic_attacks<ROOK>(square, occupied) | get_magic_attacks<BISHOP>(square, occupied);
-}
-
-// Never used, suppressing pointless warnings
-template<> constexpr Bitboard get_magic_attacks<KNIGHT>(Square, Bitboard) {
-  return 0;
-}
-
-template<> constexpr Bitboard get_magic_attacks<KING>(Square, Bitboard) {
-  return 0;
-}
