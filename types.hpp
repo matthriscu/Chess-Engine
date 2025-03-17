@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -87,21 +88,19 @@ enum Square : std::size_t {
   e8,
   f8,
   g8,
-  h8,
-  NUM_SQUARES
+  h8
 };
 
-constexpr Square from_string(std::string_view str) {
+constexpr std::optional<Square> from_string(std::string_view str) {
   if (str.size() != 2 || !('a' <= str[0] && str[0] <= 'h') ||
       !('1' <= str[1] && str[1] <= '8'))
-    return NUM_SQUARES;
-  return static_cast<Square>((str[1] - '1') * 8 + (str[0] - 'a'));
+    return std::nullopt;
+
+  return std::make_optional(
+      static_cast<Square>((str[1] - '1') * 8 + (str[0] - 'a')));
 }
 
 constexpr std::string to_string(Square square) {
-  if (square == NUM_SQUARES)
-    return "-";
-
   return std::string(1, 'a' + square % 8) + std::to_string(1 + square / 8);
 }
 

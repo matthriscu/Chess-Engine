@@ -18,7 +18,7 @@ run: $(EXE)
 
 # Linking the final executable
 $(EXE): $(OBJ_FILES)
-	$(CXX) $(OBJ_FILES) -o $(EXE)
+	$(CXX) $(OBJ_FILES) -o $(EXE) $(CXXFLAGS)
 
 # Compiling the object files
 %.o: %.cpp $(HEADER_FILES)

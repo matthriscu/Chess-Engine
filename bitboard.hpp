@@ -3,7 +3,6 @@
 #include "magic.hpp"
 #include "types.hpp"
 #include <array>
-#include <cstdint>
 
 inline constexpr std::array<Bitboard, 8> files = []() {
   std::array<Bitboard, 8> files;
@@ -88,12 +87,10 @@ inline constexpr std::array<std::array<Bitboard, 64>, NUM_SIDES> pawn_attacks =
         Bitboard bb = 1ULL << square;
 
         attacks[WHITE][square] =
-            ((bb & ~(ranks[0] | ranks[7] | files[0])) << 7) |
-            ((bb & ~(ranks[0] | ranks[7] | files[7])) << 9);
+            ((bb & ~files[0]) << 7) | ((bb & ~files[7]) << 9);
 
         attacks[BLACK][square] =
-            ((bb & ~(ranks[0] | ranks[7] | files[0])) >> 9) |
-            ((bb & ~(ranks[0] | ranks[7] | files[7])) >> 7);
+            ((bb & ~files[0]) >> 9) | ((bb & ~files[7]) >> 7);
       }
 
       return attacks;
