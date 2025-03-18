@@ -62,10 +62,18 @@ struct Move {
 
   constexpr bool is_double_push() const { return (data & flags) == 1 << 12; }
 
-  constexpr std::optional<Piece> promoted_to() const {
-    if (is_promotion())
-      return static_cast<Piece>(((data >> 12) & 0b11) + 1);
+  constexpr Piece promoted_to() const {
+    return static_cast<Piece>(((data >> 12) & 0b11) + 1);
+  }
 
-    return std::nullopt;
+  constexpr uint16_t raw() const { return data; }
+
+  constexpr std::string uci() {
+    std::string ans = to_string(from()) + to_string(to());
+
+    if (is_promotion())
+      ans += piece_to_char(promoted_to(), Side::BLACK);
+
+    return ans;
   }
 };

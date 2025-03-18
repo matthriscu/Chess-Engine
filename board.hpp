@@ -22,6 +22,8 @@ struct Board {
   Side stm;
   enum_array<Side, std::array<bool, 2>, NUM_SIDES> castling_rights;
 
+  constexpr Board() = default;
+
   constexpr Board(std::string_view fen_string) {
     std::vector<std::string_view> tokens =
         fen_string | std::views::split(' ') |
@@ -105,7 +107,7 @@ struct Board {
 
     if (m.is_promotion()) {
       remove_piece(stm, Piece::PAWN, m.to());
-      add_piece(stm, m.promoted_to().value(), m.to());
+      add_piece(stm, m.promoted_to(), m.to());
     }
 
     if (m.is_castle()) {
@@ -286,7 +288,7 @@ struct Board {
     return move_list;
   }
 
-  constexpr std::pair<MoveList, size_t> generate_moves() const {
+  constexpr std::pair<MoveList, size_t> generate_pseudolegal_moves() const {
     MoveList moves;
 
     Move *ptr = moves.data();
@@ -297,6 +299,18 @@ struct Board {
 
     return make_pair(moves, ptr - moves.data());
   };
+
+  constexpr std::pair<MoveList, size_t> generate_legal_moves() const {
+    auto [moves, len] = generate_pseudolegal_moves();
+
+    return std::make_pair(
+        moves, std::partition(moves.begin(), moves.begin() + len, [&](Move m) {
+                 Board copy = *this;
+                 copy.make_move(m);
+
+                 return !copy.is_check();
+               }) - moves.begin());
+  }
 };
 
 template <> struct std::formatter<Board> {
