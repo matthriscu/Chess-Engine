@@ -1,10 +1,13 @@
 #pragma once
 
 #include "attacks.hpp"
+#include "common.hpp"
 #include "enum_array.hpp"
 #include "move.hpp"
 #include "types.hpp"
+#include <chrono>
 #include <cstdint>
+#include <functional>
 #include <print>
 #include <ranges>
 #include <vector>
@@ -25,11 +28,7 @@ struct Board {
   constexpr Board() = default;
 
   constexpr Board(std::string_view fen_string) {
-    std::vector<std::string_view> tokens =
-        fen_string | std::views::split(' ') |
-        std::views::transform(
-            [](auto subrange) { return std::string_view(subrange); }) |
-        std::ranges::to<std::vector<std::string_view>>();
+    std::vector<std::string_view> tokens = string_tokenizer(fen_string);
 
     pieces = {};
     side_occupancy = {};
@@ -169,10 +168,16 @@ struct Board {
     return pawn_attacks[opponent(side)][square] & pieces[side][Piece::PAWN];
   }
 
+  constexpr bool is_legal() const {
+    return !is_attacked(static_cast<Square>(std::countr_zero(
+                            pieces[opponent(stm)][Piece::KING])),
+                        stm);
+  }
+
   constexpr bool is_check() const {
-    return is_attacked(static_cast<Square>(std::countr_zero(
-                           pieces[opponent(stm)][Piece::KING])),
-                       stm);
+    return is_attacked(
+        static_cast<Square>(std::countr_zero(pieces[stm][Piece::KING])),
+        opponent(stm));
   }
 
   constexpr Move *generate_regular_moves(Move *move_list) const {
@@ -308,8 +313,113 @@ struct Board {
                  Board copy = *this;
                  copy.make_move(m);
 
-                 return !copy.is_check();
+                 return !copy.is_legal();
                }) - moves.begin());
+  }
+
+  constexpr int evaluation() const {
+    auto eval_side = [&](Side side) {
+      return std::ranges::fold_left(
+          std::views::zip_transform(
+              [](Bitboard bb, int value) { return std::popcount(bb) * value; },
+              pieces[side], PIECE_VALUES),
+          0, std::plus{});
+    };
+
+    return eval_side(stm) - eval_side(opponent(stm));
+  }
+
+  constexpr bool move_comparator(Move a, Move b) const {
+    if (a.is_capture() && b.is_capture()) {
+      Piece a_attacker = square_to_piece[a.from()].value(),
+            b_attacker = square_to_piece[b.from()].value(),
+            a_victim = a.is_en_passant() ? Piece::PAWN
+                                         : square_to_piece[a.to()].value(),
+            b_victim = b.is_en_passant() ? Piece::PAWN
+                                         : square_to_piece[b.to()].value();
+
+      if (a_attacker == b_attacker)
+        return a_victim > b_victim;
+
+      return a_attacker < b_attacker;
+    }
+
+    return a.is_capture();
+  }
+
+  constexpr Move
+  bestmove(std::chrono::steady_clock::time_point deadline) const {
+    Move best_move_iter, best_move(Square::a1, Square::a1, false);
+    int best_value_iter;
+    bool timed_out = false;
+    size_t nodes = 0;
+
+    static constexpr int INFINITY = 1e9;
+
+    auto time_up = [deadline]() {
+      return std::chrono::steady_clock::now() >= deadline;
+    };
+
+    auto negamax = [&](this auto self, const Board &board, size_t depth,
+                       size_t ply, int alpha, int beta) {
+      if (depth == 0)
+        return board.evaluation();
+
+      int value = -INFINITY;
+
+      auto [moves, len] = board.generate_pseudolegal_moves();
+
+      std::ranges::sort(moves.begin(), moves.begin() + len,
+                        std::bind_front(&Board::move_comparator, &board));
+
+      for (Move move : std::views::take(moves, len)) {
+        if (++nodes == 1024) {
+          if (time_up()) {
+            timed_out = true;
+            break;
+          }
+
+          nodes = 0;
+        }
+
+        Board copy = board;
+        copy.make_move(move);
+
+        if (copy.is_legal()) {
+          value =
+              std::max(value, -self(copy, depth - 1, ply + 1, -beta, -alpha));
+
+          if (timed_out)
+            break;
+
+          if (ply == 0 && value > best_value_iter) {
+            best_value_iter = value;
+            best_move_iter = move;
+          }
+
+          if (alpha >= beta)
+            break;
+        }
+      }
+
+      if (value == -INFINITY)
+        return board.is_check() ? static_cast<int>(ply) - INFINITY : 0;
+
+      return value;
+    };
+
+    for (size_t depth = 1; !time_up(); ++depth) {
+      best_value_iter = -INFINITY;
+
+      negamax(*this, depth, 0, -INFINITY, INFINITY);
+
+      if (!timed_out)
+        best_move = best_move_iter;
+      else
+        break;
+    }
+
+    return best_move;
   }
 };
 

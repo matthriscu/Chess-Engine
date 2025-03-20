@@ -1,4 +1,7 @@
+#pragma once
+
 #include "board.hpp"
+#include "common.hpp"
 #include <optional>
 #include <ranges>
 #include <string>
@@ -17,13 +20,10 @@ class UCIEngine {
     else if (command == "isready")
       return "readyok";
     else if (command.starts_with("position")) {
-      std::vector<std::string_view> tokens =
-          command | std::views::split(' ') |
-          std::views::transform(
-              [](auto subrange) { return std::string_view(subrange); }) |
-          std::ranges::to<std::vector<std::string_view>>();
+      std::vector<std::string_view> tokens = string_tokenizer(command);
 
       size_t moves_list_start;
+
       if (tokens[1] == "startpos") {
         position =
             Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -36,7 +36,7 @@ class UCIEngine {
       }
 
       for (std::string_view move_str :
-           std::ranges::drop_view(tokens, moves_list_start)) {
+           std::views::drop(tokens, moves_list_start)) {
         Square from = from_string(move_str.substr(0, 2)).value(),
                to = from_string(move_str.substr(2, 2)).value();
 
@@ -51,7 +51,7 @@ class UCIEngine {
           mask = 0b0000111111111111;
         }
 
-        auto [moves, len] = position.generate_legal_moves();
+        auto [moves, len] = position.generate_pseudolegal_moves();
 
         position.make_move(
             *std::find_if(moves.begin(), moves.begin() + len, [&](Move m) {
@@ -61,8 +61,18 @@ class UCIEngine {
 
       return std::nullopt;
     } else if (command.starts_with("go")) {
-      auto [moves, len] = position.generate_legal_moves();
-      return format("bestmove {}", moves[rand() % len].uci());
+      std::vector<std::string_view> tokens = string_tokenizer(command);
+      size_t relevant_time_index = position.stm == Side::WHITE ? 2 : 4;
+
+      size_t time = 0;
+      std::from_chars(tokens[relevant_time_index].begin(),
+                      tokens[relevant_time_index].end(), time);
+
+      return format("bestmove {}",
+                    position
+                        .bestmove(std::chrono::steady_clock::now() +
+                                  std::chrono::milliseconds(time / 30))
+                        .uci());
     } else
       return std::nullopt;
   }

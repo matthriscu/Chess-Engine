@@ -13,7 +13,7 @@ void perft(std::string_view fen, size_t depth) {
       Board copy = board;
       copy.make_move(m);
 
-      if (!copy.is_check())
+      if (copy.is_legal())
         ans += self(copy, depth - 1);
     }
 
@@ -27,7 +27,7 @@ void perft(std::string_view fen, size_t depth) {
     Board copy = board;
     copy.make_move(m);
 
-    if (!copy.is_check()) {
+    if (!copy.is_legal()) {
       if (m.is_promotion())
         std::println("{}{}{} - {} ", to_string(m.from()), to_string(m.to()),
                      piece_to_char(m.promoted_to(), Side::WHITE),
