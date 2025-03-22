@@ -1,14 +1,11 @@
 #pragma once
 
-#include "enum_array.hpp"
+#include "enumarray.hpp"
 #include <algorithm>
 #include <array>
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
-
-using Bitboard = uint64_t;
 
 // clang-format off
 enum class Square : std::size_t {
@@ -42,8 +39,8 @@ enum class Piece : size_t { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
 
 inline constexpr size_t NUM_PIECES = 6;
 
-inline constexpr enum_array<Piece, int, NUM_PIECES> PIECE_VALUES{1, 3, 3,
-                                                                 5, 9, 0};
+inline constexpr EnumArray<Piece, int, NUM_PIECES> PIECE_VALUES{1, 3, 3,
+                                                                5, 9, 0};
 
 constexpr Side opponent(Side side) {
   return side == Side::WHITE ? Side::BLACK : Side::WHITE;

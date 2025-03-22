@@ -51,12 +51,11 @@ class UCIEngine {
           mask = 0b0000111111111111;
         }
 
-        auto [moves, len] = position.generate_pseudolegal_moves();
+        MoveList moves = position.pseudolegal_moves();
 
-        position.make_move(
-            *std::find_if(moves.begin(), moves.begin() + len, [&](Move m) {
-              return (m.raw() & mask) == (move.raw() & mask);
-            }));
+        position.make_move(*std::ranges::find_if(moves, [&](Move m) {
+          return (m.raw() & mask) == (move.raw() & mask);
+        }));
       }
 
       return std::nullopt;

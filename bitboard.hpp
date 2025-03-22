@@ -1,51 +1,184 @@
 #pragma once
 
 #include "types.hpp"
-#include <array>
-
-inline constexpr std::array<Bitboard, 8> files = []() {
-  std::array<Bitboard, 8> files;
-
-  for (size_t file = 0; file < 8; ++file)
-    files[file] = 0x0101010101010101ULL << file;
-
-  return files;
-}();
-
-inline constexpr std::array<Bitboard, 8> ranks = []() {
-  std::array<Bitboard, 8> ranks;
-
-  for (size_t rank = 0; rank < 8; ++rank)
-    ranks[rank] = 0xFFULL << (8 * rank);
-
-  return ranks;
-}();
+#include <print>
 
 constexpr Square get_square(auto rank, auto file) {
   return static_cast<Square>(8UZ * rank + file);
 }
 
-constexpr Bitboard get_bit(auto rank, auto file) {
-  return get_bit(get_square(rank, file));
+enum class Direction {
+  NORTH = 8,
+  EAST = 1,
+  SOUTH = -NORTH,
+  WEST = -EAST,
+
+  NORTH_WEST = NORTH + WEST,
+  NORTH_EAST = NORTH + EAST,
+  SOUTH_WEST = SOUTH + WEST,
+  SOUTH_EAST = SOUTH + EAST
+};
+
+class Bitboard {
+public:
+  constexpr Bitboard() : data(0) {}
+
+  constexpr Bitboard(Square square)
+      : data(1ULL << static_cast<size_t>(square)) {}
+
+  constexpr Bitboard(int rank, int file) : Bitboard(get_square(rank, file)) {}
+
+  constexpr Bitboard(uint64_t data) : data(data) {}
+
+  constexpr uint64_t raw() const { return data; }
+
+  constexpr operator bool() const { return data; }
+
+  constexpr operator Square() const {
+    return static_cast<Square>(std::countr_zero(data));
+  }
+
+  constexpr Bitboard operator<<(int shift) const { return data << shift; }
+
+  constexpr Bitboard &operator<<=(int shift) {
+    data <<= shift;
+    return *this;
+  }
+
+  constexpr Bitboard operator>>(int shift) const { return data >> shift; }
+
+  constexpr Bitboard &operator>>=(int shift) {
+    data >>= shift;
+    return *this;
+  }
+
+  constexpr Bitboard operator~() const { return ~data; }
+
+  constexpr Bitboard operator&(Bitboard other) const {
+    return data & other.data;
+  }
+
+  constexpr Bitboard &operator&=(Bitboard other) {
+    data &= other.data;
+    return *this;
+  }
+
+  constexpr Bitboard operator|(Bitboard other) const {
+    return data | other.data;
+  }
+
+  constexpr Bitboard &operator|=(Bitboard other) {
+    data |= other.data;
+    return *this;
+  }
+
+  constexpr Bitboard operator^(Bitboard other) const {
+    return data ^ other.data;
+  }
+
+  constexpr Bitboard &operator^=(Bitboard other) {
+    data ^= other.data;
+    return *this;
+  }
+
+  constexpr Bitboard lsb() const { return 1ULL << std::countr_zero(data); }
+
+  constexpr Square pop_lsb() {
+    Bitboard bit = lsb();
+    *this &= ~bit;
+
+    return static_cast<Square>(std::countr_zero(bit.data));
+  }
+
+  constexpr int popcount() const { return std::popcount(data); }
+
+  template <Direction D> constexpr Bitboard shift() const;
+
+  constexpr Bitboard shift(Direction D) const {
+    switch (D) {
+    case Direction::NORTH:
+      return shift<Direction::NORTH>();
+    case Direction::EAST:
+      return shift<Direction::EAST>();
+    case Direction::SOUTH:
+      return shift<Direction::SOUTH>();
+    case Direction::WEST:
+      return shift<Direction::WEST>();
+    case Direction::NORTH_WEST:
+      return shift<Direction::NORTH_WEST>();
+    case Direction::NORTH_EAST:
+      return shift<Direction::NORTH_EAST>();
+    case Direction::SOUTH_WEST:
+      return shift<Direction::SOUTH_WEST>();
+    case Direction::SOUTH_EAST:
+      return shift<Direction::SOUTH_EAST>();
+    default:
+      return 0;
+    }
+  }
+
+private:
+  uint64_t data;
+};
+
+namespace Bitboards {
+static constexpr Bitboard FileA = 0x0101010101010101ULL;
+static constexpr Bitboard FileB = FileA << 1;
+static constexpr Bitboard FileC = FileA << 2;
+static constexpr Bitboard FileD = FileA << 3;
+static constexpr Bitboard FileE = FileA << 4;
+static constexpr Bitboard FileF = FileA << 5;
+static constexpr Bitboard FileG = FileA << 6;
+static constexpr Bitboard FileH = FileA << 7;
+
+static constexpr Bitboard Rank1 = 0xFF;
+static constexpr Bitboard Rank2 = Rank1 << 8;
+static constexpr Bitboard Rank3 = Rank1 << 16;
+static constexpr Bitboard Rank4 = Rank1 << 24;
+static constexpr Bitboard Rank5 = Rank1 << 32;
+static constexpr Bitboard Rank6 = Rank1 << 40;
+static constexpr Bitboard Rank7 = Rank1 << 48;
+static constexpr Bitboard Rank8 = Rank1 << 56;
+}; // namespace Bitboards
+
+template <Direction D> constexpr Bitboard Bitboard::shift() const {
+  switch (D) {
+  case Direction::NORTH:
+    return data << 8;
+  case Direction::SOUTH:
+    return data >> 8;
+  case Direction::WEST:
+    return (*this & ~Bitboards::FileA) >> 1;
+  case Direction::EAST:
+    return (*this & ~Bitboards::FileH) << 1;
+  case Direction::NORTH_WEST:
+    return (*this & ~Bitboards::FileA) << 7;
+  case Direction::NORTH_EAST:
+    return (*this & ~Bitboards::FileH) << 9;
+  case Direction::SOUTH_WEST:
+    return (*this & ~Bitboards::FileA) >> 9;
+  case Direction::SOUTH_EAST:
+    return (*this & ~Bitboards::FileH) >> 7;
+  }
 }
 
-constexpr Bitboard get_bit(Square square) {
-  return 1ULL << static_cast<size_t>(square);
-}
+template <> struct std::formatter<Bitboard> {
+  constexpr auto parse(std::format_parse_context &ctx) { return ctx.begin(); }
 
-constexpr Bitboard north(Bitboard bb) { return (bb & ~ranks[7]) << 8; }
+  auto format(Bitboard bb, std::format_context &ctx) const {
+    auto out = ctx.out();
 
-constexpr Bitboard west(Bitboard bb) { return (bb & ~files[0]) << 1; }
+    out = std::format_to(out, "\t\tA B C D E F G H\n");
 
-constexpr Bitboard east(Bitboard bb) { return (bb & ~files[7]) >> 1; }
+    for (int rank = 7; rank >= 0; --rank) {
+      out = std::format_to(out, "\t{}\t", rank + 1);
+      for (int file = 0; file < 8; ++file) {
+        out = std::format_to(out, "{:d} ", bool(bb & Bitboard(rank, file)));
+      }
 
-constexpr Bitboard south(Bitboard bb) { return (bb & ~ranks[0]) >> 8; }
+      out = std::format_to(out, "\t{}\n", rank + 1);
+    }
 
-constexpr Square pop_lsb(Bitboard &bb) {
-  Bitboard lsb = bb & -bb;
-  bb &= ~lsb;
-
-  return static_cast<Square>(std::countr_zero(lsb));
-}
-
-void print_bitboard(Bitboard bitboard);
+    return std::format_to(out, "\n\t\tA B C D E F G H\t\t{:#X}\n", bb.raw());
+  }
+};
