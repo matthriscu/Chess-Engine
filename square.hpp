@@ -1,11 +1,10 @@
 #pragma once
 
+#include "enumarray.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <print>
 #include <string>
-
-inline constexpr size_t NUM_SQUARES = 64;
 
 class Square {
 public:
@@ -92,16 +91,17 @@ private:
 namespace Squares {
 using enum Square::Literal;
 
-inline constexpr std::array<Square, NUM_SQUARES> ALL = []() {
-  std::array<Square, NUM_SQUARES> squares;
+inline constexpr int NUM = 64;
 
-  std::generate_n(squares.begin(), NUM_SQUARES,
-                  [i = 0]() mutable { return i++; });
+inline constexpr std::array<Square, NUM> ALL = []() {
+  std::array<Square, NUM> squares;
+
+  std::generate_n(squares.begin(), NUM, [i = 0]() mutable { return i++; });
 
   return squares;
 }();
 
-template <typename T> using Array = EnumArray<Square::Literal, T, NUM_SQUARES>;
+template <typename T> using Array = EnumArray<Square::Literal, T, NUM>;
 }; // namespace Squares
 
 template <> struct std::formatter<Square> {

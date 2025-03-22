@@ -1,7 +1,7 @@
 #pragma once
 
 #include "board.hpp"
-#include "common.hpp"
+#include "util.hpp"
 #include <optional>
 #include <ranges>
 #include <string>
@@ -43,7 +43,7 @@ class UCIEngine {
         uint16_t mask;
 
         if (move_str.size() == 5) {
-          move = Move(from, to, false, char_to_piece(move_str[4]).value());
+          move = Move(from, to, false, Piece(move_str[4]));
           mask = 0b0011111111111111;
         } else {
           move = Move(from, to, false);
@@ -60,7 +60,7 @@ class UCIEngine {
       return std::nullopt;
     } else if (command.starts_with("go")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
-      size_t relevant_time_index = position.stm == Side::WHITE ? 2 : 4;
+      size_t relevant_time_index = position.stm == Sides::WHITE ? 2 : 4;
 
       size_t time = 0;
       std::from_chars(tokens[relevant_time_index].begin(),

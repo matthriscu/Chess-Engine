@@ -1,7 +1,8 @@
 #pragma once
 
+#include "piece.hpp"
 #include "square.hpp"
-#include "types.hpp"
+#include <cassert>
 #include <cstdint>
 
 enum class Special {
@@ -44,7 +45,7 @@ struct Move {
   constexpr Move(Square from, Square to, bool is_capture,
                  Piece promoted_to_piece)
       : Move(from, to, is_capture) {
-    data |= ((static_cast<size_t>(promoted_to_piece) - 1) << 12) | (1 << 15);
+    data |= ((promoted_to_piece.raw() - 1) << 12) | (1 << 15);
   }
 
   constexpr Square from() const { return data & 0b111111; }
@@ -64,7 +65,7 @@ struct Move {
   constexpr bool is_double_push() const { return (data & flags) == 1 << 12; }
 
   constexpr Piece promoted_to() const {
-    return static_cast<Piece>(((data >> 12) & 0b11) + 1);
+    return Piece(((data >> 12) & 0b11) + 1);
   }
 
   constexpr uint16_t raw() const { return data; }
@@ -73,7 +74,7 @@ struct Move {
     std::string ans = from().to_string() + to().to_string();
 
     if (is_promotion())
-      ans += piece_to_char(promoted_to(), Side::BLACK);
+      ans += promoted_to().repr();
 
     return ans;
   }

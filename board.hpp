@@ -2,11 +2,13 @@
 
 #include "attacks.hpp"
 #include "bitboard.hpp"
-#include "common.hpp"
 #include "enumarray.hpp"
 #include "move.hpp"
 #include "movelist.hpp"
+#include "side.hpp"
 #include "types.hpp"
+#include "util.hpp"
+#include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -15,15 +17,15 @@
 #include <vector>
 
 struct Board {
-  EnumArray<Side, EnumArray<Piece, Bitboard, NUM_PIECES>, NUM_SIDES> pieces;
-  EnumArray<Side, Bitboard, NUM_SIDES + 1> side_occupancy;
+  Sides::Array<Pieces::Array<Bitboard>> pieces;
+  Sides::Array<Bitboard> side_occupancy;
   Squares::Array<std::optional<Piece>> square_to_piece;
   Bitboard general_occupancy;
 
   int halfmove_clock;
   std::optional<Square> en_passant_square;
   Side stm;
-  EnumArray<Side, std::array<bool, 2>, NUM_SIDES> castling_rights;
+  Sides::Array<std::array<bool, 2>> castling_rights;
 
   constexpr Board() = default;
 
@@ -43,8 +45,8 @@ struct Board {
       } else if (isdigit(c))
         file += c - '0';
       else {
-        const Piece piece = char_to_piece(c).value();
-        const Side side = 'A' <= c && c <= 'Z' ? Side::WHITE : Side::BLACK;
+        const Piece piece(c);
+        const Side side = 'A' <= c && c <= 'Z' ? Sides::WHITE : Sides::BLACK;
 
         pieces[side][piece] |= Bitboard(rank, file);
 
@@ -55,12 +57,12 @@ struct Board {
       }
 
     general_occupancy =
-        side_occupancy[Side::WHITE] | side_occupancy[Side::BLACK];
-    stm = tokens[1] == "w" ? Side::WHITE : Side::BLACK;
-    castling_rights[Side::WHITE][0] = tokens[2].contains('K');
-    castling_rights[Side::WHITE][1] = tokens[2].contains('Q');
-    castling_rights[Side::BLACK][0] = tokens[2].contains('k');
-    castling_rights[Side::BLACK][1] = tokens[2].contains('q');
+        side_occupancy[Sides::WHITE] | side_occupancy[Sides::BLACK];
+    stm = tokens[1] == "w" ? Sides::WHITE : Sides::BLACK;
+    castling_rights[Sides::WHITE][0] = tokens[2].contains('K');
+    castling_rights[Sides::WHITE][1] = tokens[2].contains('Q');
+    castling_rights[Sides::BLACK][0] = tokens[2].contains('k');
+    castling_rights[Sides::BLACK][1] = tokens[2].contains('q');
     en_passant_square =
         tokens[3] != "-" ? std::make_optional<Square>(tokens[3]) : std::nullopt;
     std::from_chars(tokens[4].begin(), tokens[4].end(), halfmove_clock);
@@ -86,77 +88,75 @@ struct Board {
     Piece moved_piece = square_to_piece[m.from()].value();
 
     if (m.is_en_passant())
-      remove_piece(opponent(stm), Piece::PAWN,
-                   en_passant_square.value().shift(stm == Side::WHITE
+      remove_piece(stm.opponent(), Pieces::PAWN,
+                   en_passant_square.value().shift(stm == Sides::WHITE
                                                        ? Direction::SOUTH
                                                        : Direction::NORTH));
     else if (m.is_capture())
-      remove_piece(opponent(stm), square_to_piece[m.to()].value(), m.to());
+      remove_piece(stm.opponent(), square_to_piece[m.to()].value(), m.to());
 
     move_piece(stm, moved_piece, m.from(), m.to());
 
-    if (moved_piece == Piece::KING)
+    if (moved_piece == Pieces::KING)
       castling_rights[stm] = {};
 
     if (m.from() == Squares::H1 || m.to() == Squares::H1)
-      castling_rights[Side::WHITE][0] = false;
+      castling_rights[Sides::WHITE][0] = false;
     else if (m.from() == Squares::A1 || m.to() == Squares::A1)
-      castling_rights[Side::WHITE][1] = false;
+      castling_rights[Sides::WHITE][1] = false;
 
     if (m.from() == Squares::H8 || m.to() == Squares::H8)
-      castling_rights[Side::BLACK][0] = false;
+      castling_rights[Sides::BLACK][0] = false;
     else if (m.from() == Squares::A8 || m.to() == Squares::A8)
-      castling_rights[Side::BLACK][1] = false;
+      castling_rights[Sides::BLACK][1] = false;
 
     if (m.is_promotion()) {
-      remove_piece(stm, Piece::PAWN, m.to());
+      remove_piece(stm, Pieces::PAWN, m.to());
       add_piece(stm, m.promoted_to(), m.to());
     }
 
     if (m.is_castle()) {
       if (m.to() == Squares::G1)
-        move_piece(stm, Piece::ROOK, Squares::H1, Squares::F1);
+        move_piece(stm, Pieces::ROOK, Squares::H1, Squares::F1);
       else if (m.to() == Squares::C1)
-        move_piece(stm, Piece::ROOK, Squares::A1, Squares::D1);
+        move_piece(stm, Pieces::ROOK, Squares::A1, Squares::D1);
       else if (m.to() == Squares::G8)
-        move_piece(stm, Piece::ROOK, Squares::H8, Squares::F8);
+        move_piece(stm, Pieces::ROOK, Squares::H8, Squares::F8);
       else if (m.to() == Squares::C8)
-        move_piece(stm, Piece::ROOK, Squares::A8, Squares::D8);
+        move_piece(stm, Pieces::ROOK, Squares::A8, Squares::D8);
     }
 
-    for (Side side : {Side::WHITE, Side::BLACK}) {
+    for (Side side : Sides::ALL) {
       side_occupancy[side] = 0;
 
-      for (Piece piece : {Piece::PAWN, Piece::KNIGHT, Piece::BISHOP,
-                          Piece::ROOK, Piece::QUEEN, Piece::KING})
+      for (Piece piece : Pieces::ALL)
         side_occupancy[side] |= pieces[side][piece];
     }
 
     if (m.is_double_push())
       en_passant_square = std::make_optional(m.to().shift(
-          stm == Side::WHITE ? Direction::SOUTH : Direction::NORTH));
+          stm == Sides::WHITE ? Direction::SOUTH : Direction::NORTH));
     else
       en_passant_square = std::nullopt;
 
     general_occupancy =
-        side_occupancy[Side::WHITE] | side_occupancy[Side::BLACK];
-    stm = opponent(stm);
+        side_occupancy[Sides::WHITE] | side_occupancy[Sides::BLACK];
+    stm = stm.opponent();
     halfmove_clock =
-        moved_piece == Piece::PAWN || m.is_capture() ? 0 : halfmove_clock + 1;
+        moved_piece == Pieces::PAWN || m.is_capture() ? 0 : halfmove_clock + 1;
   }
 
   constexpr Bitboard threats(Side side) const {
     Bitboard threats = 0;
 
-    for (Piece p : {Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN,
-                    Piece::KING}) {
+    for (Piece p : std::views::drop(Pieces::ALL, 1)) {
       Bitboard bb = pieces[side][p];
 
       while (bb)
         threats |= attacks_bb(p, bb.pop_lsb(), general_occupancy);
     }
 
-    Bitboard bb = pieces[side][Piece::PAWN];
+    Bitboard bb = pieces[side][Pieces::PAWN];
     while (bb)
       threats |= pawn_attacks[side][bb.pop_lsb()];
 
@@ -164,26 +164,24 @@ struct Board {
   }
 
   constexpr bool is_attacked(Square square, Side side) const {
-    for (Piece p :
-         {Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN, Piece::KING})
+    for (Piece p : std::views::drop(Pieces::ALL, 1))
       if (attacks_bb(p, square, general_occupancy) & pieces[side][p])
         return true;
 
-    return pawn_attacks[opponent(side)][square] & pieces[side][Piece::PAWN];
+    return pawn_attacks[side.opponent()][square] & pieces[side][Pieces::PAWN];
   }
 
   constexpr bool is_legal() const {
     return !is_attacked(
-        static_cast<Square>(Square(pieces[opponent(stm)][Piece::KING])), stm);
+        static_cast<Square>(Square(pieces[stm.opponent()][Pieces::KING])), stm);
   }
 
   constexpr bool is_check() const {
-    return is_attacked(Square(pieces[stm][Piece::KING]), opponent(stm));
+    return is_attacked(Square(pieces[stm][Pieces::KING]), stm.opponent());
   }
 
   constexpr void generate_regular_moves(MoveList &move_list) const {
-    for (Piece p : {Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN,
-                    Piece::KING}) {
+    for (Piece p : std::views::drop(Pieces::ALL, 1)) {
       Bitboard bb = pieces[stm][p];
 
       while (bb) {
@@ -201,16 +199,15 @@ struct Board {
   }
 
   constexpr void generate_castling_moves(MoveList &move_list) const {
-    static constexpr EnumArray<Side, std::array<Bitboard, 2>, NUM_SIDES>
-        castling_free_masks = {0x60, 0xE, 0x6000000000000000,
-                               0xE00000000000000};
+    static constexpr Sides::Array<std::array<Bitboard, 2>> castling_free_masks =
+        {0x60, 0xE, 0x6000000000000000, 0xE00000000000000};
 
-    static constexpr EnumArray<Side, std::array<Bitboard, 2>, NUM_SIDES>
+    static constexpr Sides::Array<std::array<Bitboard, 2>>
         castling_attack_masks = {0x70, 0x1C, 0x7000000000000000,
                                  0x1c00000000000000};
 
-    Bitboard threats_bb = threats(opponent(stm));
-    size_t castling_rank = stm == Side::WHITE ? 0 : 7;
+    Bitboard threats_bb = threats(stm.opponent());
+    size_t castling_rank = stm == Sides::WHITE ? 0 : 7;
     Square king_square(castling_rank, 4);
 
     for (size_t i = 0; i < 2; ++i)
@@ -227,7 +224,7 @@ struct Board {
     // Function pointers to disambiguate templated functions
     Direction from, to;
 
-    if (stm == Side::WHITE) {
+    if (stm == Sides::WHITE) {
       to = Direction::NORTH;
       from = Direction::SOUTH;
     } else {
@@ -235,11 +232,11 @@ struct Board {
       from = Direction::NORTH;
     }
 
-    Bitboard bb = pieces[stm][Piece::PAWN],
+    Bitboard bb = pieces[stm][Pieces::PAWN],
              last_rank =
-                 stm == Side::WHITE ? Bitboards::Rank8 : Bitboards::Rank1,
+                 stm == Sides::WHITE ? Bitboards::Rank8 : Bitboards::Rank1,
              third_rank =
-                 stm == Side::WHITE ? Bitboards::Rank3 : Bitboards::Rank6,
+                 stm == Sides::WHITE ? Bitboards::Rank3 : Bitboards::Rank6,
              single_pushes = bb.shift(to) & ~general_occupancy,
              double_pushes =
                  (single_pushes & third_rank).shift(to) & ~general_occupancy;
@@ -249,8 +246,9 @@ struct Board {
 
       if (last_rank & Bitboard(to))
         for (Piece p :
-             {Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN})
+             {Pieces::KNIGHT, Pieces::BISHOP, Pieces::ROOK, Pieces::QUEEN}) {
           move_list.push_back(Move(to.shift(from), to, false, p));
+        }
       else
         move_list.push_back(Move(to.shift(from), to, false));
     }
@@ -265,14 +263,14 @@ struct Board {
     while (bb) {
       Square from = bb.pop_lsb();
       Bitboard attacks =
-          pawn_attacks[stm][from] & side_occupancy[opponent(stm)];
+          pawn_attacks[stm][from] & side_occupancy[stm.opponent()];
 
       while (attacks) {
         Square to = attacks.pop_lsb();
 
         if (last_rank & Bitboard(to))
           for (Piece p :
-               {Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN})
+               {Pieces::KNIGHT, Pieces::BISHOP, Pieces::ROOK, Pieces::QUEEN})
             move_list.push_back(Move(from, to, true, p));
         else
           move_list.push_back(Move(from, to, true));
@@ -281,8 +279,8 @@ struct Board {
 
     if (en_passant_square) {
       Bitboard attackers =
-          pawn_attacks[opponent(stm)][en_passant_square.value()] &
-          pieces[stm][Piece::PAWN];
+          pawn_attacks[stm.opponent()][en_passant_square.value()] &
+          pieces[stm][Pieces::PAWN];
 
       while (attackers) {
         Square from = attackers.pop_lsb();
@@ -305,22 +303,24 @@ struct Board {
   constexpr int evaluation() const {
     auto eval_side = [&](Side side) {
       return std::ranges::fold_left(
-          std::views::zip_transform(
-              [](Bitboard bb, int value) { return bb.popcount() * value; },
-              pieces[side], PIECE_VALUES),
+          std::views::transform(Pieces::ALL,
+                                [&](Piece piece) {
+                                  return pieces[side][piece].popcount() *
+                                         piece.value();
+                                }),
           0, std::plus{});
     };
 
-    return eval_side(stm) - eval_side(opponent(stm));
+    return eval_side(stm) - eval_side(stm.opponent());
   }
 
   constexpr bool move_comparator(Move a, Move b) const {
     if (a.is_capture() && b.is_capture()) {
       Piece a_attacker = square_to_piece[a.from()].value(),
             b_attacker = square_to_piece[b.from()].value(),
-            a_victim = a.is_en_passant() ? Piece::PAWN
+            a_victim = a.is_en_passant() ? Piece(Pieces::PAWN)
                                          : square_to_piece[a.to()].value(),
-            b_victim = b.is_en_passant() ? Piece::PAWN
+            b_victim = b.is_en_passant() ? Piece(Pieces::PAWN)
                                          : square_to_piece[b.to()].value();
 
       if (a_attacker == b_attacker)
@@ -419,37 +419,28 @@ template <> struct std::formatter<Board> {
     for (int8_t rank = 7; rank >= 0; --rank) {
       out = std::format_to(out, "\t{}\t", rank + 1);
       for (uint8_t file = 0; file < 8; ++file) {
-        out =
-            std::format_to(out, "{} ",
-                           board.square_to_piece[Square(rank, file)]
-                               .transform([&](Piece piece) {
-                                 return piece_to_char(
-                                     piece, board.side_occupancy[Side::WHITE] &
-                                                    Bitboard(rank, file)
-                                                ? Side::WHITE
-                                                : Side::BLACK);
-                               })
-                               .value_or('.'));
+        out = std::format_to(out, "{} ",
+                             board.square_to_piece[Square(rank, file)].value());
       }
 
       out = std::format_to(out, "\t{}\n", rank + 1);
     }
 
     std::string castling;
-    if (board.castling_rights[Side::WHITE][0])
+    if (board.castling_rights[Sides::WHITE][0])
       castling += 'K';
-    if (board.castling_rights[Side::WHITE][1])
+    if (board.castling_rights[Sides::WHITE][1])
       castling += 'Q';
-    if (board.castling_rights[Side::BLACK][0])
+    if (board.castling_rights[Sides::BLACK][0])
       castling += 'k';
-    if (board.castling_rights[Side::BLACK][1])
+    if (board.castling_rights[Sides::BLACK][1])
       castling += 'q';
     if (castling.empty())
       castling = "-";
 
     out = std::format_to(
         out, "\n\t\tA B C D E F G H\t\t{} {} {} {}\n",
-        board.stm == Side::WHITE ? 'w' : 'b', castling,
+        board.stm == Sides::WHITE ? 'w' : 'b', castling,
         board.en_passant_square
             .transform([](Square square) { return std::format("{}", square); })
             .value_or("-"),

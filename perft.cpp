@@ -25,13 +25,7 @@ void perft(std::string_view fen, size_t depth) {
     Board copy = board;
     copy.make_move(m);
 
-    if (copy.is_legal()) {
-      if (m.is_promotion())
-        std::println("{}{}{} - {} ", m.from(), m.to(),
-                     piece_to_char(m.promoted_to(), Side::WHITE),
-                     rec(copy, depth - 1));
-      else
-        std::println("{}{} - {}", m.from(), m.to(), rec(copy, depth - 1));
-    }
+    if (copy.is_legal())
+      std::println("{} - {}", m.uci(), rec(copy, depth - 1));
   }
 }
