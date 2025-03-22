@@ -1,5 +1,6 @@
 #pragma once
 
+#include "square.hpp"
 #include "types.hpp"
 #include <cstdint>
 
@@ -21,8 +22,8 @@ struct Move {
   constexpr Move() = default;
 
   constexpr Move(Square from, Square to, bool is_capture)
-      : data(static_cast<size_t>(from) | (static_cast<size_t>(to) << 6) |
-             (static_cast<size_t>(is_capture) << 14)) {}
+      : data(from.raw() | (to.raw() << 6) |
+             (static_cast<int>(is_capture) << 14)) {}
 
   constexpr Move(Square from, Square to, Special special)
       : Move(from, to, special == Special::EN_PASSANT) {
@@ -46,11 +47,9 @@ struct Move {
     data |= ((static_cast<size_t>(promoted_to_piece) - 1) << 12) | (1 << 15);
   }
 
-  constexpr Square from() const { return static_cast<Square>(data & 0b111111); }
+  constexpr Square from() const { return data & 0b111111; }
 
-  constexpr Square to() const {
-    return static_cast<Square>((data >> 6) & 0b111111);
-  }
+  constexpr Square to() const { return (data >> 6) & 0b111111; }
 
   constexpr bool is_capture() const { return data & (1 << 14); }
 
@@ -71,7 +70,7 @@ struct Move {
   constexpr uint16_t raw() const { return data; }
 
   constexpr std::string uci() {
-    std::string ans = to_string(from()) + to_string(to());
+    std::string ans = from().to_string() + to().to_string();
 
     if (is_promotion())
       ans += piece_to_char(promoted_to(), Side::BLACK);

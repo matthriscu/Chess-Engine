@@ -5,13 +5,11 @@
 #include "magic.hpp"
 #include "types.hpp"
 
-inline constexpr EnumArray<Side, EnumArray<Square, Bitboard, NUM_SQUARES>,
-                           NUM_SIDES>
+inline constexpr EnumArray<Side, Squares::Array<Bitboard>, NUM_SIDES>
     pawn_attacks = []() {
-      EnumArray<Side, EnumArray<Square, Bitboard, NUM_SQUARES>, NUM_SIDES>
-          attacks;
+      EnumArray<Side, Squares::Array<Bitboard>, NUM_SIDES> attacks;
 
-      for (Square square : ALL_SQUARES) {
+      for (Square square : Squares::ALL) {
         Bitboard bb(square);
 
         attacks[Side::WHITE][square] = bb.shift<Direction::NORTH_WEST>() |
@@ -29,61 +27,59 @@ constexpr Bitboard attacks_bb(Square square, Bitboard occupied);
 
 template <>
 constexpr Bitboard attacks_bb<Piece::KNIGHT>(Square square, Bitboard) {
-  static constexpr EnumArray<Square, Bitboard, NUM_SQUARES> pseudoattacks =
-      []() {
-        EnumArray<Square, Bitboard, NUM_SQUARES> moves;
+  static constexpr Squares::Array<Bitboard> pseudoattacks = []() {
+    Squares::Array<Bitboard> moves;
 
-        for (Square square : ALL_SQUARES) {
-          Bitboard bb(square);
+    for (Square square : Squares::ALL) {
+      Bitboard bb(square);
 
-          moves[square] =
-              bb.shift<Direction::NORTH>().shift<Direction::NORTH_WEST>() |
-              bb.shift<Direction::NORTH>().shift<Direction::NORTH_EAST>() |
-              bb.shift<Direction::WEST>().shift<Direction::NORTH_WEST>() |
-              bb.shift<Direction::WEST>().shift<Direction::SOUTH_WEST>() |
-              bb.shift<Direction::SOUTH>().shift<Direction::SOUTH_WEST>() |
-              bb.shift<Direction::SOUTH>().shift<Direction::SOUTH_EAST>() |
-              bb.shift<Direction::EAST>().shift<Direction::NORTH_EAST>() |
-              bb.shift<Direction::EAST>().shift<Direction::SOUTH_EAST>();
-        }
+      moves[square] =
+          bb.shift<Direction::NORTH>().shift<Direction::NORTH_WEST>() |
+          bb.shift<Direction::NORTH>().shift<Direction::NORTH_EAST>() |
+          bb.shift<Direction::WEST>().shift<Direction::NORTH_WEST>() |
+          bb.shift<Direction::WEST>().shift<Direction::SOUTH_WEST>() |
+          bb.shift<Direction::SOUTH>().shift<Direction::SOUTH_WEST>() |
+          bb.shift<Direction::SOUTH>().shift<Direction::SOUTH_EAST>() |
+          bb.shift<Direction::EAST>().shift<Direction::NORTH_EAST>() |
+          bb.shift<Direction::EAST>().shift<Direction::SOUTH_EAST>();
+    }
 
-        return moves;
-      }();
+    return moves;
+  }();
 
   return pseudoattacks[square];
 }
 
 template <>
 constexpr Bitboard attacks_bb<Piece::KING>(Square square, Bitboard) {
-  static constexpr EnumArray<Square, Bitboard, NUM_SQUARES> pseudoattacks =
-      []() {
-        EnumArray<Square, Bitboard, NUM_SQUARES> moves;
+  static constexpr Squares::Array<Bitboard> pseudoattacks = []() {
+    Squares::Array<Bitboard> moves;
 
-        for (Square square : ALL_SQUARES) {
-          Bitboard bb(square);
+    for (Square square : Squares::ALL) {
+      Bitboard bb(square);
 
-          moves[square] =
-              bb.shift<Direction::NORTH_WEST>() | bb.shift<Direction::NORTH>() |
-              bb.shift<Direction::NORTH_EAST>() | bb.shift<Direction::WEST>() |
-              bb.shift<Direction::SOUTH_WEST>() | bb.shift<Direction::SOUTH>() |
-              bb.shift<Direction::SOUTH_EAST>() | bb.shift<Direction::EAST>();
-        }
+      moves[square] =
+          bb.shift<Direction::NORTH_WEST>() | bb.shift<Direction::NORTH>() |
+          bb.shift<Direction::NORTH_EAST>() | bb.shift<Direction::WEST>() |
+          bb.shift<Direction::SOUTH_WEST>() | bb.shift<Direction::SOUTH>() |
+          bb.shift<Direction::SOUTH_EAST>() | bb.shift<Direction::EAST>();
+    }
 
-        return moves;
-      }();
+    return moves;
+  }();
 
   return pseudoattacks[square];
 }
 
 template <>
 constexpr Bitboard attacks_bb<Piece::BISHOP>(Square square, Bitboard occupied) {
-  FancyHash m = magics<Piece::BISHOP>[static_cast<size_t>(square)];
+  FancyHash m = magics<Piece::BISHOP>[square.raw()];
   return m.attacks[((occupied.raw() | m.mask) * m.hash) >> (64 - 9)];
 }
 
 template <>
 constexpr Bitboard attacks_bb<Piece::ROOK>(Square square, Bitboard occupied) {
-  FancyHash m = magics<Piece::ROOK>[static_cast<size_t>(square)];
+  FancyHash m = magics<Piece::ROOK>[square.raw()];
   return m.attacks[((occupied.raw() | m.mask) * m.hash) >> (64 - 12)];
 }
 

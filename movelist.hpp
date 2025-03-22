@@ -1,3 +1,5 @@
+#pragma once
+
 #include "move.hpp"
 #include <cstddef>
 

@@ -17,7 +17,7 @@
 struct Board {
   EnumArray<Side, EnumArray<Piece, Bitboard, NUM_PIECES>, NUM_SIDES> pieces;
   EnumArray<Side, Bitboard, NUM_SIDES + 1> side_occupancy;
-  EnumArray<Square, std::optional<Piece>, NUM_SQUARES> square_to_piece;
+  Squares::Array<std::optional<Piece>> square_to_piece;
   Bitboard general_occupancy;
 
   int halfmove_clock;
@@ -49,7 +49,7 @@ struct Board {
         pieces[side][piece] |= Bitboard(rank, file);
 
         side_occupancy[side] |= Bitboard(rank, file);
-        square_to_piece[get_square(rank, file)] = piece;
+        square_to_piece[Square(rank, file)] = piece;
 
         ++file;
       }
@@ -61,7 +61,8 @@ struct Board {
     castling_rights[Side::WHITE][1] = tokens[2].contains('Q');
     castling_rights[Side::BLACK][0] = tokens[2].contains('k');
     castling_rights[Side::BLACK][1] = tokens[2].contains('q');
-    en_passant_square = from_string(tokens[3]);
+    en_passant_square =
+        tokens[3] != "-" ? std::make_optional<Square>(tokens[3]) : std::nullopt;
     std::from_chars(tokens[4].begin(), tokens[4].end(), halfmove_clock);
   }
 
@@ -86,8 +87,9 @@ struct Board {
 
     if (m.is_en_passant())
       remove_piece(opponent(stm), Piece::PAWN,
-                   stm == Side::WHITE ? south(en_passant_square.value())
-                                      : north(en_passant_square.value()));
+                   en_passant_square.value().shift(stm == Side::WHITE
+                                                       ? Direction::SOUTH
+                                                       : Direction::NORTH));
     else if (m.is_capture())
       remove_piece(opponent(stm), square_to_piece[m.to()].value(), m.to());
 
@@ -96,14 +98,14 @@ struct Board {
     if (moved_piece == Piece::KING)
       castling_rights[stm] = {};
 
-    if (m.from() == Square::h1 || m.to() == Square::h1)
+    if (m.from() == Squares::H1 || m.to() == Squares::H1)
       castling_rights[Side::WHITE][0] = false;
-    else if (m.from() == Square::a1 || m.to() == Square::a1)
+    else if (m.from() == Squares::A1 || m.to() == Squares::A1)
       castling_rights[Side::WHITE][1] = false;
 
-    if (m.from() == Square::h8 || m.to() == Square::h8)
+    if (m.from() == Squares::H8 || m.to() == Squares::H8)
       castling_rights[Side::BLACK][0] = false;
-    else if (m.from() == Square::a8 || m.to() == Square::a8)
+    else if (m.from() == Squares::A8 || m.to() == Squares::A8)
       castling_rights[Side::BLACK][1] = false;
 
     if (m.is_promotion()) {
@@ -112,14 +114,14 @@ struct Board {
     }
 
     if (m.is_castle()) {
-      if (m.to() == Square::g1)
-        move_piece(stm, Piece::ROOK, Square::h1, Square::f1);
-      else if (m.to() == Square::c1)
-        move_piece(stm, Piece::ROOK, Square::a1, Square::d1);
-      else if (m.to() == Square::g8)
-        move_piece(stm, Piece::ROOK, Square::h8, Square::f8);
-      else if (m.to() == Square::c8)
-        move_piece(stm, Piece::ROOK, Square::a8, Square::d8);
+      if (m.to() == Squares::G1)
+        move_piece(stm, Piece::ROOK, Squares::H1, Squares::F1);
+      else if (m.to() == Squares::C1)
+        move_piece(stm, Piece::ROOK, Squares::A1, Squares::D1);
+      else if (m.to() == Squares::G8)
+        move_piece(stm, Piece::ROOK, Squares::H8, Squares::F8);
+      else if (m.to() == Squares::C8)
+        move_piece(stm, Piece::ROOK, Squares::A8, Squares::D8);
     }
 
     for (Side side : {Side::WHITE, Side::BLACK}) {
@@ -131,8 +133,8 @@ struct Board {
     }
 
     if (m.is_double_push())
-      en_passant_square = std::make_optional(
-          stm == Side::WHITE ? south(m.to()) : north(m.to()));
+      en_passant_square = std::make_optional(m.to().shift(
+          stm == Side::WHITE ? Direction::SOUTH : Direction::NORTH));
     else
       en_passant_square = std::nullopt;
 
@@ -209,29 +211,28 @@ struct Board {
 
     Bitboard threats_bb = threats(opponent(stm));
     size_t castling_rank = stm == Side::WHITE ? 0 : 7;
-    Square king_square = get_square(castling_rank, 4);
+    Square king_square(castling_rank, 4);
 
     for (size_t i = 0; i < 2; ++i)
       if (castling_rights[stm][i] &&
           !(general_occupancy & castling_free_masks[stm][i]) &&
           !(threats_bb & castling_attack_masks[stm][i])) {
         move_list.push_back(
-            Move(king_square, get_square(castling_rank, 6 - 4 * i),
+            Move(king_square, Square(castling_rank, 6 - 4 * i),
                  i == 0 ? Special::KING_CASTLE : Special::QUEEN_CASTLE));
       }
   }
 
   constexpr void generate_pawn_moves(MoveList &move_list) const {
     // Function pointers to disambiguate templated functions
-    Direction to;
-    Square (*from)(Square);
+    Direction from, to;
 
     if (stm == Side::WHITE) {
       to = Direction::NORTH;
-      from = south;
+      from = Direction::SOUTH;
     } else {
       to = Direction::SOUTH;
-      from = north;
+      from = Direction::NORTH;
     }
 
     Bitboard bb = pieces[stm][Piece::PAWN],
@@ -249,14 +250,16 @@ struct Board {
       if (last_rank & Bitboard(to))
         for (Piece p :
              {Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN})
-          move_list.push_back(Move(from(to), to, false, p));
+          move_list.push_back(Move(to.shift(from), to, false, p));
       else
-        move_list.push_back(Move(from(to), to, false));
+        move_list.push_back(Move(to.shift(from), to, false));
     }
 
     while (double_pushes) {
+
       Square to = double_pushes.pop_lsb();
-      move_list.push_back(Move(from(from(to)), to, Special::DOUBLE_PUSH));
+      move_list.push_back(
+          Move(to.shift(from).shift(from), to, Special::DOUBLE_PUSH));
     }
 
     while (bb) {
@@ -331,7 +334,7 @@ struct Board {
 
   constexpr Move
   bestmove(std::chrono::steady_clock::time_point deadline) const {
-    Move best_move_iter, best_move(Square::a1, Square::a1, false);
+    Move best_move_iter, best_move(Squares::A1, Squares::A1, false);
     int best_value_iter;
     bool timed_out = false;
     size_t nodes = 0;
@@ -418,7 +421,7 @@ template <> struct std::formatter<Board> {
       for (uint8_t file = 0; file < 8; ++file) {
         out =
             std::format_to(out, "{} ",
-                           board.square_to_piece[get_square(rank, file)]
+                           board.square_to_piece[Square(rank, file)]
                                .transform([&](Piece piece) {
                                  return piece_to_char(
                                      piece, board.side_occupancy[Side::WHITE] &
@@ -448,7 +451,7 @@ template <> struct std::formatter<Board> {
         out, "\n\t\tA B C D E F G H\t\t{} {} {} {}\n",
         board.stm == Side::WHITE ? 'w' : 'b', castling,
         board.en_passant_square
-            .transform([](Square square) { return to_string(square); })
+            .transform([](Square square) { return std::format("{}", square); })
             .value_or("-"),
         board.halfmove_clock);
 

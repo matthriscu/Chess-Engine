@@ -1,32 +1,16 @@
 #pragma once
 
+#include "square.hpp"
 #include "types.hpp"
 #include <print>
 
-constexpr Square get_square(auto rank, auto file) {
-  return static_cast<Square>(8UZ * rank + file);
-}
-
-enum class Direction {
-  NORTH = 8,
-  EAST = 1,
-  SOUTH = -NORTH,
-  WEST = -EAST,
-
-  NORTH_WEST = NORTH + WEST,
-  NORTH_EAST = NORTH + EAST,
-  SOUTH_WEST = SOUTH + WEST,
-  SOUTH_EAST = SOUTH + EAST
-};
-
 class Bitboard {
 public:
-  constexpr Bitboard() : data(0) {}
+  constexpr Bitboard() : Bitboard(0) {}
 
-  constexpr Bitboard(Square square)
-      : data(1ULL << static_cast<size_t>(square)) {}
+  constexpr Bitboard(Square square) : data(1ULL << square.raw()) {}
 
-  constexpr Bitboard(int rank, int file) : Bitboard(get_square(rank, file)) {}
+  constexpr Bitboard(int rank, int file) : Bitboard(Square(rank, file)) {}
 
   constexpr Bitboard(uint64_t data) : data(data) {}
 
@@ -94,8 +78,8 @@ public:
 
   template <Direction D> constexpr Bitboard shift() const;
 
-  constexpr Bitboard shift(Direction D) const {
-    switch (D) {
+  constexpr Bitboard shift(Direction d) const {
+    switch (d) {
     case Direction::NORTH:
       return shift<Direction::NORTH>();
     case Direction::EAST:

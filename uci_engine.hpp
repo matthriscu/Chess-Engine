@@ -37,8 +37,7 @@ class UCIEngine {
 
       for (std::string_view move_str :
            std::views::drop(tokens, moves_list_start)) {
-        Square from = from_string(move_str.substr(0, 2)).value(),
-               to = from_string(move_str.substr(2, 2)).value();
+        Square from(move_str.substr(0, 2)), to(move_str.substr(2, 2));
 
         Move move;
         uint16_t mask;

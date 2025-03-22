@@ -27,12 +27,11 @@ void perft(std::string_view fen, size_t depth) {
 
     if (copy.is_legal()) {
       if (m.is_promotion())
-        std::println("{}{}{} - {} ", to_string(m.from()), to_string(m.to()),
+        std::println("{}{}{} - {} ", m.from(), m.to(),
                      piece_to_char(m.promoted_to(), Side::WHITE),
                      rec(copy, depth - 1));
       else
-        std::println("{}{} - {}", to_string(m.from()), to_string(m.to()),
-                     rec(copy, depth - 1));
+        std::println("{}{} - {}", m.from(), m.to(), rec(copy, depth - 1));
     }
   }
 }
