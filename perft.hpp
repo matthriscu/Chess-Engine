@@ -1,5 +1,6 @@
 #pragma once
 
-#include <string_view>
+#include "board.hpp"
 
-void perft(std::string_view fen, size_t depth);
+int perft(const Board &board, int depth);
+void splitperft(const Board &board, int depth);

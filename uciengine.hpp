@@ -1,24 +1,20 @@
 #pragma once
 
 #include "board.hpp"
-#include "util.hpp"
-#include <optional>
-#include <ranges>
-#include <string>
+#include "perft.hpp"
+#include <iostream>
 
 class UCIEngine {
-  static constexpr std::string name = "name", author = "author";
   Board position;
 
-  constexpr std::optional<std::string>
-  process_command(std::string_view command) {
+public:
+  void process_command(std::string_view command) {
     if (command == "uci")
-      return format("id name {}\n"
-                    "id author {}\n"
-                    "uciok",
-                    name, author);
+      std::puts("id name <name>\n"
+                "id author <author>\n"
+                "uciok");
     else if (command == "isready")
-      return "readyok";
+      std::puts("readyok");
     else if (command.starts_with("position")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
 
@@ -56,8 +52,6 @@ class UCIEngine {
           return (m.raw() & mask) == (move.raw() & mask);
         }));
       }
-
-      return std::nullopt;
     } else if (command.starts_with("go")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
       size_t relevant_time_index = position.stm == Sides::WHITE ? 2 : 4;
@@ -66,15 +60,38 @@ class UCIEngine {
       std::from_chars(tokens[relevant_time_index].begin(),
                       tokens[relevant_time_index].end(), time);
 
-      return format("bestmove {}",
-                    position
-                        .bestmove(std::chrono::steady_clock::now() +
-                                  std::chrono::milliseconds(time / 30))
-                        .uci());
-    } else
-      return std::nullopt;
+      std::println("bestmove {}",
+                   position
+                       .bestmove(std::chrono::steady_clock::now() +
+                                 std::chrono::milliseconds(time / 30))
+                       .uci());
+    } else if (command.starts_with("perft")) {
+      std::vector<std::string_view> tokens = string_tokenizer(command);
+
+      int depth;
+      std::from_chars(tokens[1].begin(), tokens[1].end(), depth);
+
+      std::println("{}", perft(position, depth));
+    } else if (command.starts_with("splitperft")) {
+      std::vector<std::string_view> tokens = string_tokenizer(command);
+
+      int depth;
+      std::from_chars(tokens[1].begin(), tokens[1].end(), depth);
+
+      splitperft(position, depth);
+    }
   }
 
-public:
-  void play();
+  void play() {
+    std::string command;
+
+    while (true) {
+      getline(std::cin, command);
+
+      if (command == "quit")
+        break;
+
+      process_command(command);
+    }
+  }
 };

@@ -48,9 +48,9 @@ struct Move {
     data |= ((promoted_to_piece.raw() - 1) << 12) | (1 << 15);
   }
 
-  constexpr Square from() const { return data & 0b111111; }
+  constexpr Square from() const { return Square(data & 0b111111); }
 
-  constexpr Square to() const { return (data >> 6) & 0b111111; }
+  constexpr Square to() const { return Square((data >> 6) & 0b111111); }
 
   constexpr bool is_capture() const { return data & (1 << 14); }
 
@@ -65,7 +65,7 @@ struct Move {
   constexpr bool is_double_push() const { return (data & flags) == 1 << 12; }
 
   constexpr Piece promoted_to() const {
-    return Piece(((data >> 12) & 0b11) + 1);
+    return Piece(static_cast<Piece::Literal>(((data >> 12) & 0b11) + 1));
   }
 
   constexpr uint16_t raw() const { return data; }

@@ -12,8 +12,6 @@ public:
 
   constexpr Piece(Literal data) : data(data) {}
 
-  constexpr Piece(int data) : data(static_cast<Literal>(data)) {}
-
   constexpr Piece(char c) {
     switch (c) {
     case 'P':

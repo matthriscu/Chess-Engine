@@ -19,11 +19,11 @@
 struct Board {
   Sides::Array<Pieces::Array<Bitboard>> pieces;
   Sides::Array<Bitboard> side_occupancy;
-  Squares::Array<std::optional<Piece>> square_to_piece;
+  Squares::Array<Piece> square_to_piece;
   Bitboard general_occupancy;
 
   int halfmove_clock;
-  std::optional<Square> en_passant_square;
+  Square en_passant_square;
   Side stm;
   Sides::Array<std::array<bool, 2>> castling_rights;
 
@@ -63,8 +63,7 @@ struct Board {
     castling_rights[Sides::WHITE][1] = tokens[2].contains('Q');
     castling_rights[Sides::BLACK][0] = tokens[2].contains('k');
     castling_rights[Sides::BLACK][1] = tokens[2].contains('q');
-    en_passant_square =
-        tokens[3] != "-" ? std::make_optional<Square>(tokens[3]) : std::nullopt;
+    en_passant_square = Square(tokens[3]);
     std::from_chars(tokens[4].begin(), tokens[4].end(), halfmove_clock);
   }
 
@@ -76,24 +75,24 @@ struct Board {
 
     auto remove_piece = [&](Side side, Piece piece, Square square) {
       pieces[side][piece] &= ~Bitboard(square);
-      square_to_piece[square] = std::nullopt;
+      square_to_piece[square] = Pieces::NONE;
     };
 
     auto move_piece = [&](Side side, Piece piece, Square from, Square to) {
       pieces[side][piece] ^= Bitboard(from) | Bitboard(to);
-      square_to_piece[from] = std::nullopt;
+      square_to_piece[from] = Pieces::NONE;
       square_to_piece[to] = piece;
     };
 
-    Piece moved_piece = square_to_piece[m.from()].value();
+    Piece moved_piece = square_to_piece[m.from()];
 
     if (m.is_en_passant())
       remove_piece(stm.opponent(), Pieces::PAWN,
-                   en_passant_square.value().shift(stm == Sides::WHITE
-                                                       ? Direction::SOUTH
-                                                       : Direction::NORTH));
+                   en_passant_square.shift(stm == Sides::WHITE
+                                               ? Direction::SOUTH
+                                               : Direction::NORTH));
     else if (m.is_capture())
-      remove_piece(stm.opponent(), square_to_piece[m.to()].value(), m.to());
+      remove_piece(stm.opponent(), square_to_piece[m.to()], m.to());
 
     move_piece(stm, moved_piece, m.from(), m.to());
 
@@ -134,10 +133,10 @@ struct Board {
     }
 
     if (m.is_double_push())
-      en_passant_square = std::make_optional(m.to().shift(
-          stm == Sides::WHITE ? Direction::SOUTH : Direction::NORTH));
+      en_passant_square = m.to().shift(stm == Sides::WHITE ? Direction::SOUTH
+                                                           : Direction::NORTH);
     else
-      en_passant_square = std::nullopt;
+      en_passant_square = Squares::NONE;
 
     general_occupancy =
         side_occupancy[Sides::WHITE] | side_occupancy[Sides::BLACK];
@@ -192,7 +191,8 @@ struct Board {
 
         while (attacks) {
           Square to = attacks.pop_lsb();
-          move_list.push_back(Move(from, to, square_to_piece[to].has_value()));
+          move_list.push_back(
+              Move(from, to, square_to_piece[to] != Pieces::NONE));
         }
       }
     }
@@ -277,15 +277,13 @@ struct Board {
       }
     }
 
-    if (en_passant_square) {
-      Bitboard attackers =
-          pawn_attacks[stm.opponent()][en_passant_square.value()] &
-          pieces[stm][Pieces::PAWN];
+    if (en_passant_square != Squares::NONE) {
+      Bitboard attackers = pawn_attacks[stm.opponent()][en_passant_square] &
+                           pieces[stm][Pieces::PAWN];
 
       while (attackers) {
         Square from = attackers.pop_lsb();
-        move_list.push_back(
-            Move(from, en_passant_square.value(), Special::EN_PASSANT));
+        move_list.push_back(Move(from, en_passant_square, Special::EN_PASSANT));
       }
     }
   }
@@ -316,12 +314,12 @@ struct Board {
 
   constexpr bool move_comparator(Move a, Move b) const {
     if (a.is_capture() && b.is_capture()) {
-      Piece a_attacker = square_to_piece[a.from()].value(),
-            b_attacker = square_to_piece[b.from()].value(),
+      Piece a_attacker = square_to_piece[a.from()],
+            b_attacker = square_to_piece[b.from()],
             a_victim = a.is_en_passant() ? Piece(Pieces::PAWN)
-                                         : square_to_piece[a.to()].value(),
+                                         : square_to_piece[a.to()],
             b_victim = b.is_en_passant() ? Piece(Pieces::PAWN)
-                                         : square_to_piece[b.to()].value();
+                                         : square_to_piece[b.to()];
 
       if (a_attacker == b_attacker)
         return a_victim > b_victim;
@@ -420,7 +418,7 @@ template <> struct std::formatter<Board> {
       out = std::format_to(out, "\t{}\t", rank + 1);
       for (uint8_t file = 0; file < 8; ++file) {
         out = std::format_to(out, "{} ",
-                             board.square_to_piece[Square(rank, file)].value());
+                             board.square_to_piece[Square(rank, file)]);
       }
 
       out = std::format_to(out, "\t{}\n", rank + 1);
@@ -438,13 +436,9 @@ template <> struct std::formatter<Board> {
     if (castling.empty())
       castling = "-";
 
-    out = std::format_to(
-        out, "\n\t\tA B C D E F G H\t\t{} {} {} {}\n",
-        board.stm == Sides::WHITE ? 'w' : 'b', castling,
-        board.en_passant_square
-            .transform([](Square square) { return std::format("{}", square); })
-            .value_or("-"),
-        board.halfmove_clock);
+    out = std::format_to(out, "\n\t\tA B C D E F G H\t\t{} {} {} {}\n",
+                         board.stm == Sides::WHITE ? 'w' : 'b', castling,
+                         board.en_passant_square, board.halfmove_clock);
 
     return out;
   }

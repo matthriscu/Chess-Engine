@@ -17,19 +17,22 @@ public:
     A5, B5, C5, D5, E5, F5, G5, H5,
     A6, B6, C6, D6, E6, F6, G6, H6,
     A7, B7, C7, D7, E7, F7, G7, H7,
-    A8, B8, C8, D8, E8, F8, G8, H8
+    A8, B8, C8, D8, E8, F8, G8, H8,
+    NONE
   };
   // clang-format on
 
-  constexpr Square() : Square(0) {}
+  constexpr Square() : Square(Literal::NONE) {}
 
   constexpr Square(Literal data) : data(data) {}
 
-  constexpr Square(int data) : data(static_cast<Literal>(data)) {}
+  explicit constexpr Square(int data) : data(static_cast<Literal>(data)) {}
 
   constexpr Square(int rank, int file) : Square(8 * rank + file) {}
 
-  constexpr Square(std::string_view str) : Square(str[1] - '1', str[0] - 'a') {}
+  constexpr Square(std::string_view str)
+      : Square(str == "-" ? Square(Literal::NONE)
+                          : Square(str[1] - '1', str[0] - 'a')) {}
 
   constexpr int raw() const { return static_cast<int>(data); }
 
@@ -47,17 +50,17 @@ public:
     switch (D) {
     case Direction::NORTH:
     case Direction::SOUTH:
-      return raw() + static_cast<int>(D);
+      return Square(raw() + static_cast<int>(D));
     case Direction::WEST:
     case Direction::NORTH_WEST:
     case Direction::SOUTH_WEST:
-      return file() != 0 ? raw() + static_cast<int>(D) : raw();
+      return Square(file() != 0 ? raw() + static_cast<int>(D) : raw());
     case Direction::EAST:
     case Direction::NORTH_EAST:
     case Direction::SOUTH_EAST:
-      return file() != 7 ? raw() + static_cast<int>(D) : raw();
+      return Square(file() != 7 ? raw() + static_cast<int>(D) : raw());
     default:
-      return 0;
+      return Literal::NONE;
     };
   }
 
@@ -80,7 +83,7 @@ public:
     case Direction::SOUTH_EAST:
       return shift<Direction::SOUTH_EAST>();
     default:
-      return 0;
+      return Literal::NONE;
     }
   }
 
@@ -96,7 +99,8 @@ inline constexpr int NUM = 64;
 inline constexpr std::array<Square, NUM> ALL = []() {
   std::array<Square, NUM> squares;
 
-  std::generate_n(squares.begin(), NUM, [i = 0]() mutable { return i++; });
+  std::generate_n(squares.begin(), NUM,
+                  [i = 0]() mutable { return Square(i++); });
 
   return squares;
 }();
@@ -108,7 +112,9 @@ template <> struct std::formatter<Square> {
   constexpr auto parse(std::format_parse_context &ctx) { return ctx.begin(); }
 
   auto format(Square square, std::format_context &ctx) const {
-    return std::format_to(ctx.out(), "{:c}{}", 'a' + square.raw() % 8,
-                          1 + square.raw() / 8);
+    return square != Squares::NONE
+               ? std::format_to(ctx.out(), "{:c}{}", 'a' + square.raw() % 8,
+                                1 + square.raw() / 8)
+               : std::format_to(ctx.out(), "-");
   }
 };
