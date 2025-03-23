@@ -2,10 +2,12 @@
 
 #include "board.hpp"
 #include "perft.hpp"
+#include "searcher.hpp"
 #include <iostream>
 
 class UCIEngine {
   Board position;
+  Searcher searcher;
 
 public:
   void process_command(std::string_view command) {
@@ -54,17 +56,19 @@ public:
       }
     } else if (command.starts_with("go")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
-      size_t relevant_time_index = position.stm == Sides::WHITE ? 2 : 4;
+      bool movetime = tokens[1] == "movetime";
 
-      size_t time = 0;
+      int relevant_time_index =
+              (movetime || position.stm == Sides::WHITE) ? 2 : 4,
+          time = 0;
+
       std::from_chars(tokens[relevant_time_index].begin(),
                       tokens[relevant_time_index].end(), time);
 
-      std::println("bestmove {}",
-                   position
-                       .bestmove(std::chrono::steady_clock::now() +
-                                 std::chrono::milliseconds(time / 30))
-                       .uci());
+      if (!movetime)
+        time /= 30;
+
+      std::println("bestmove {}", searcher.search(position, time).uci());
     } else if (command.starts_with("perft")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
 
