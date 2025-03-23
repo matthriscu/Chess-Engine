@@ -4,6 +4,7 @@
 class Searcher {
   static constexpr int INF = 1e9;
 
+  std::vector<uint64_t> hashes;
   int nodes_searched = 0;
   bool timed_out = false;
   std::chrono::steady_clock::time_point deadline;
@@ -11,7 +12,8 @@ class Searcher {
 
   bool is_time_up() {
     if (++nodes_searched == 1024) {
-      timed_out = std::chrono::steady_clock::now() >= deadline;
+      timed_out = std::chrono::steady_clock::now() >= deadline &&
+                  best_move_iter != Move();
       nodes_searched = 0;
     }
 
@@ -46,7 +48,16 @@ class Searcher {
       if (copy.is_legal()) {
         found_legal_move = true;
 
+        uint64_t hash = copy.hash();
+
+        if (std::ranges::count(hashes, hash) == 2)
+          return 0;
+
+        hashes.push_back(hash);
+
         int value = -quiesce(copy, ply + 1, -beta, -alpha);
+
+        hashes.pop_back();
 
         if (timed_out)
           return 0;
@@ -83,6 +94,13 @@ class Searcher {
       if (copy.is_legal()) {
         found_legal_move = true;
 
+        uint64_t hash = copy.hash();
+
+        if (std::ranges::count(hashes, hash) == 2)
+          return 0;
+
+        hashes.push_back(hash);
+
         int value;
 
         if (first_move) {
@@ -94,6 +112,8 @@ class Searcher {
           if (value > alpha && beta - alpha > 1)
             value = -pvs(copy, depth - 1, ply + 1, -beta, -alpha);
         }
+
+        hashes.pop_back();
 
         if (timed_out)
           return 0;
@@ -122,20 +142,27 @@ public:
     timed_out = false;
     deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds(time);
+    best_move_iter = Move();
+
+    hashes.push_back(board.hash());
 
     Move best_move;
 
     for (int depth = 1;; ++depth) {
       std::println("info depth {}", depth);
-      best_move_iter = Move();
 
       pvs(board, depth);
 
-      if (timed_out)
+      if (depth != 1 && timed_out)
         break;
 
       best_move = best_move_iter;
     }
+
+    Board copy = board;
+    copy.make_move(best_move);
+
+    hashes.push_back(copy.hash());
 
     return best_move;
   }

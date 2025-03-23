@@ -9,6 +9,13 @@ class UCIEngine {
   Board position;
   Searcher searcher;
 
+private:
+  constexpr int stoi(std::string_view str) const {
+    int result;
+    std::from_chars(str.begin(), str.end(), result);
+    return result;
+  }
+
 public:
   void process_command(std::string_view command) {
     if (command == "uci")
@@ -60,29 +67,24 @@ public:
 
       int relevant_time_index =
               (movetime || position.stm == Sides::WHITE) ? 2 : 4,
-          time = 0;
-
-      std::from_chars(tokens[relevant_time_index].begin(),
-                      tokens[relevant_time_index].end(), time);
+          time = stoi(tokens[relevant_time_index]),
+          relevant_increment_index = relevant_time_index + 4;
 
       if (!movetime)
-        time /= 30;
+        time /= 20;
+
+      if (relevant_increment_index < tokens.size())
+        time += stoi(tokens[relevant_increment_index]) / 2;
 
       std::println("bestmove {}", searcher.search(position, time).uci());
     } else if (command.starts_with("perft")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
 
-      int depth;
-      std::from_chars(tokens[1].begin(), tokens[1].end(), depth);
-
-      std::println("{}", perft(position, depth));
+      std::println("{}", perft(position, stoi(tokens[1])));
     } else if (command.starts_with("splitperft")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
 
-      int depth;
-      std::from_chars(tokens[1].begin(), tokens[1].end(), depth);
-
-      splitperft(position, depth);
+      splitperft(position, stoi(tokens[1]));
     }
   }
 

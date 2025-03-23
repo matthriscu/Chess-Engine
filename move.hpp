@@ -48,6 +48,8 @@ struct Move {
     data |= ((promoted_to_piece.raw() - 1) << 12) | (1 << 15);
   }
 
+  constexpr auto operator<=>(const Move &) const = default;
+
   constexpr Square from() const { return Square(data & 0b111111); }
 
   constexpr Square to() const { return Square((data >> 6) & 0b111111); }

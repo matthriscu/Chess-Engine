@@ -45,7 +45,7 @@ public:
 
   constexpr operator Literal() const { return data; }
 
-  constexpr char repr(Side side = Sides::WHITE) const {
+  constexpr char repr(Side side = Sides::BLACK) const {
     return side == Sides::WHITE ? "PNBRQK."[raw()] : "pnbrqk."[raw()];
   }
 

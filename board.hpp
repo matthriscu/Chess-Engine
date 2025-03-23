@@ -3,13 +3,13 @@
 #include "attacks.hpp"
 #include "bitboard.hpp"
 #include "enumarray.hpp"
+#include "hashing.hpp"
 #include "move.hpp"
 #include "movelist.hpp"
 #include "side.hpp"
 #include "types.hpp"
 #include "util.hpp"
 #include <cassert>
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <print>
@@ -330,79 +330,29 @@ struct Board {
     return a.is_capture();
   }
 
-  constexpr Move
-  bestmove(std::chrono::steady_clock::time_point deadline) const {
-    Move best_move_iter, best_move(Squares::A1, Squares::A1, false);
-    int best_value_iter;
-    bool timed_out = false;
-    size_t nodes = 0;
+  constexpr uint64_t hash() const {
+    uint64_t hash = 0;
 
-    static constexpr int INFINITY = 1e9;
-
-    auto time_up = [deadline]() {
-      return std::chrono::steady_clock::now() >= deadline;
-    };
-
-    auto negamax = [&](this auto self, const Board &board, size_t depth,
-                       size_t ply, int alpha, int beta) {
-      if (depth == 0)
-        return board.evaluation();
-
-      int value = -INFINITY;
-
-      MoveList moves = board.pseudolegal_moves();
-
-      std::ranges::sort(moves,
-                        std::bind_front(&Board::move_comparator, &board));
-
-      for (Move move : moves) {
-        if (++nodes == 1024) {
-          if (time_up()) {
-            timed_out = true;
-            break;
-          }
-
-          nodes = 0;
-        }
-
-        Board copy = board;
-        copy.make_move(move);
-
-        if (copy.is_legal()) {
-          value =
-              std::max(value, -self(copy, depth - 1, ply + 1, -beta, -alpha));
-
-          if (timed_out)
-            break;
-
-          if (ply == 0 && value > best_value_iter) {
-            best_value_iter = value;
-            best_move_iter = move;
-          }
-
-          if (alpha >= beta)
-            break;
-        }
+    for (auto [square, piece] : std::views::zip(Squares::ALL, square_to_piece))
+      if (piece != Pieces::NONE) {
+        Side side = (pieces[Sides::WHITE][piece] & Bitboard(square))
+                        ? Sides::WHITE
+                        : Sides::BLACK;
+        hash ^= square_rands[square][piece][side];
       }
 
-      if (value == -INFINITY)
-        return board.is_check() ? static_cast<int>(ply) - INFINITY : 0;
+    for (Side side : Sides::ALL)
+      for (int i = 0; i < 2; ++i)
+        if (castling_rights[side][i])
+          hash ^= castling_rands[side][i];
 
-      return value;
-    };
+    if (en_passant_square != Squares::NONE)
+      hash ^= en_passant_rands[en_passant_square.file()];
 
-    for (size_t depth = 1; !time_up(); ++depth) {
-      best_value_iter = -INFINITY;
+    if (stm == Sides::BLACK)
+      hash ^= stm_rand;
 
-      negamax(*this, depth, 0, -INFINITY, INFINITY);
-
-      if (!timed_out)
-        best_move = best_move_iter;
-      else
-        break;
-    }
-
-    return best_move;
+    return hash;
   }
 };
 
