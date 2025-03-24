@@ -172,11 +172,14 @@ struct Board {
 
   constexpr bool is_legal() const {
     return !is_attacked(
-        static_cast<Square>(Square(pieces[stm.opponent()][Pieces::KING])), stm);
+        Square(std::countr_zero(pieces[stm.opponent()][Pieces::KING].raw())),
+        stm);
   }
 
   constexpr bool is_check() const {
-    return is_attacked(Square(pieces[stm][Pieces::KING]), stm.opponent());
+    return is_attacked(
+        Square(std::countr_zero(pieces[stm][Pieces::KING].raw())),
+        stm.opponent());
   }
 
   constexpr void generate_regular_moves(MoveList &move_list) const {
@@ -321,10 +324,10 @@ struct Board {
             b_victim = b.is_en_passant() ? Piece(Pieces::PAWN)
                                          : square_to_piece[b.to()];
 
-      if (a_attacker == b_attacker)
-        return a_victim > b_victim;
+      if (a_victim == b_victim)
+        return a_attacker < b_attacker;
 
-      return a_attacker < b_attacker;
+      return a_victim > b_victim;
     }
 
     return a.is_capture();

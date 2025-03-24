@@ -20,23 +20,26 @@ class Searcher {
     return timed_out;
   }
 
-  constexpr int quiesce(const Board &board, int ply, int alpha, int beta) {
+  int qsearch(const Board &board, int ply, int alpha, int beta) {
     if (is_time_up())
-      return 0;
+      return alpha;
 
     if (board.is_check())
       return pvs(board, 1, ply, alpha, beta);
 
-    int stand_pat = board.evaluation();
+    int stand_pat = board.evaluation(), best_value = stand_pat;
 
     if (stand_pat >= beta)
       return stand_pat;
 
-    if (alpha < stand_pat)
-      alpha = stand_pat;
+    uint64_t hash = board.hash();
 
-    bool found_legal_move = false;
-    int best_value = -INF;
+    if (std::ranges::count(hashes, hash) == 2)
+      return 0;
+
+    hashes.push_back(hash);
+
+    alpha = std::max(alpha, stand_pat);
 
     MoveList moves = board.pseudolegal_moves();
     std::ranges::sort(moves, std::bind_front(&Board::move_comparator, &board));
@@ -46,40 +49,44 @@ class Searcher {
       copy.make_move(move);
 
       if (copy.is_legal()) {
-        found_legal_move = true;
 
-        uint64_t hash = copy.hash();
+        int value = -qsearch(copy, ply + 1, -beta, -alpha);
 
-        if (std::ranges::count(hashes, hash) == 2)
-          return 0;
+        if (timed_out) {
+          hashes.pop_back();
+          return alpha;
+        }
 
-        hashes.push_back(hash);
-
-        int value = -quiesce(copy, ply + 1, -beta, -alpha);
-
-        hashes.pop_back();
-
-        if (timed_out)
-          return 0;
-
-        if (value >= beta)
+        if (value >= beta) {
+          hashes.pop_back();
           return value;
+        }
 
         best_value = std::max(best_value, value);
         alpha = std::max(alpha, value);
       }
     }
 
-    return found_legal_move ? best_value : 0;
+    hashes.pop_back();
+
+    return best_value;
   }
 
-  constexpr int pvs(const Board &board, int depth, int ply = 0,
-                    int alpha = -INF, int beta = INF) {
+  int pvs(const Board &board, int depth, int ply = 0, int alpha = -INF,
+          int beta = INF) {
+
     if (is_time_up())
-      return 0;
+      return alpha;
 
     if (depth == 0)
-      return quiesce(board, ply, alpha, beta);
+      return qsearch(board, ply, alpha, beta);
+
+    uint64_t hash = board.hash();
+
+    if (std::ranges::count(hashes, hash) == 2)
+      return 0;
+
+    hashes.push_back(hash);
 
     MoveList moves = board.pseudolegal_moves();
     std::ranges::sort(moves, std::bind_front(&Board::move_comparator, &board));
@@ -93,58 +100,55 @@ class Searcher {
 
       if (copy.is_legal()) {
         found_legal_move = true;
-
-        uint64_t hash = copy.hash();
-
-        if (std::ranges::count(hashes, hash) == 2)
-          return 0;
-
-        hashes.push_back(hash);
+        first_move = false;
 
         int value;
 
-        if (first_move) {
+        if (first_move)
           value = -pvs(copy, depth - 1, ply + 1, -beta, -alpha);
-          first_move = false;
-        } else {
-          value = -pvs(copy, depth - 1, ply + 1, -alpha - 1, -alpha);
+        else {
+          value = -pvs(copy, depth - 1, ply + 1, -(alpha + 1), -alpha);
 
-          if (value > alpha && beta - alpha > 1)
+          if (alpha < value && value < beta)
             value = -pvs(copy, depth - 1, ply + 1, -beta, -alpha);
         }
 
-        hashes.pop_back();
+        if (timed_out) {
+          hashes.pop_back();
+          return alpha;
+        }
 
-        if (timed_out)
-          return 0;
-
-        if (value > best_value)
+        if (value > best_value) {
           best_value = value;
-
-        if (value > alpha) {
-          alpha = value;
 
           if (ply == 0)
             best_move_iter = move;
         }
+
+        alpha = std::max(alpha, value);
 
         if (alpha >= beta)
           break;
       }
     }
 
-    return found_legal_move ? best_value : board.is_check() ? ply - INF : 0;
+    hashes.pop_back();
+
+    if (!found_legal_move)
+      return board.is_check() ? ply - INF : 0;
+
+    return best_value;
   }
 
 public:
-  constexpr Move search(const Board &board, int time) {
+  constexpr void clear() { hashes.clear(); }
+
+  Move search(const Board &board, int time) {
     nodes_searched = 0;
     timed_out = false;
     deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds(time);
     best_move_iter = Move();
-
-    hashes.push_back(board.hash());
 
     Move best_move;
 
@@ -162,6 +166,7 @@ public:
     Board copy = board;
     copy.make_move(best_move);
 
+    hashes.push_back(board.hash());
     hashes.push_back(copy.hash());
 
     return best_move;

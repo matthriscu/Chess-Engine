@@ -65,10 +65,11 @@ public:
       std::vector<std::string_view> tokens = string_tokenizer(command);
       bool movetime = tokens[1] == "movetime";
 
-      int relevant_time_index =
-              (movetime || position.stm == Sides::WHITE) ? 2 : 4,
-          time = stoi(tokens[relevant_time_index]),
-          relevant_increment_index = relevant_time_index + 4;
+      size_t relevant_time_index =
+                 (movetime || position.stm == Sides::WHITE) ? 2 : 4,
+             relevant_increment_index = relevant_time_index + 4;
+
+      int time = stoi(tokens[relevant_time_index]);
 
       if (!movetime)
         time /= 20;
@@ -85,7 +86,8 @@ public:
       std::vector<std::string_view> tokens = string_tokenizer(command);
 
       splitperft(position, stoi(tokens[1]));
-    }
+    } else if (command == "ucinewgame")
+      searcher.clear();
   }
 
   void play() {
