@@ -18,9 +18,7 @@ public:
 
   constexpr operator bool() const { return data; }
 
-  constexpr operator Square() const {
-    return static_cast<Square>(std::countr_zero(data));
-  }
+  constexpr operator Square() const { return Square(std::countr_zero(data)); }
 
   constexpr Bitboard operator<<(int shift) const { return data << shift; }
 
@@ -71,7 +69,7 @@ public:
     Bitboard bit = lsb();
     *this &= ~bit;
 
-    return static_cast<Square>(std::countr_zero(bit.data));
+    return Square(std::countr_zero(bit.data));
   }
 
   constexpr int popcount() const { return std::popcount(data); }

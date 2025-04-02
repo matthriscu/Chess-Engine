@@ -3,6 +3,7 @@
 #include "attacks.hpp"
 #include "bitboard.hpp"
 #include "enumarray.hpp"
+#include "eval.hpp"
 #include "hashing.hpp"
 #include "move.hpp"
 #include "movelist.hpp"
@@ -11,7 +12,6 @@
 #include "util.hpp"
 #include <cassert>
 #include <cstdint>
-#include <functional>
 #include <print>
 #include <ranges>
 #include <vector>
@@ -87,12 +87,12 @@ struct Board {
     Piece moved_piece = square_to_piece[m.from()];
 
     if (m.is_en_passant())
-      remove_piece(stm.opponent(), Pieces::PAWN,
+      remove_piece(~stm, Pieces::PAWN,
                    en_passant_square.shift(stm == Sides::WHITE
                                                ? Direction::SOUTH
                                                : Direction::NORTH));
     else if (m.is_capture())
-      remove_piece(stm.opponent(), square_to_piece[m.to()], m.to());
+      remove_piece(~stm, square_to_piece[m.to()], m.to());
 
     move_piece(stm, moved_piece, m.from(), m.to());
 
@@ -140,7 +140,7 @@ struct Board {
 
     general_occupancy =
         side_occupancy[Sides::WHITE] | side_occupancy[Sides::BLACK];
-    stm = stm.opponent();
+    stm = ~stm;
     halfmove_clock =
         moved_piece == Pieces::PAWN || m.is_capture() ? 0 : halfmove_clock + 1;
   }
@@ -167,19 +167,33 @@ struct Board {
       if (attacks_bb(p, square, general_occupancy) & pieces[side][p])
         return true;
 
-    return pawn_attacks[side.opponent()][square] & pieces[side][Pieces::PAWN];
+    return pawn_attacks[~side][square] & pieces[side][Pieces::PAWN];
   }
 
   constexpr bool is_legal() const {
     return !is_attacked(
-        Square(std::countr_zero(pieces[stm.opponent()][Pieces::KING].raw())),
-        stm);
+        Square(std::countr_zero(pieces[~stm][Pieces::KING].raw())), stm);
   }
 
   constexpr bool is_check() const {
     return is_attacked(
-        Square(std::countr_zero(pieces[stm][Pieces::KING].raw())),
-        stm.opponent());
+        Square(std::countr_zero(pieces[stm][Pieces::KING].raw())), ~stm);
+  }
+
+  constexpr bool is_draw() const {
+    if (halfmove_clock >= 50)
+      return true;
+
+    if (std::ranges::count_if(square_to_piece, [](Piece piece) {
+          return piece != Pieces::NONE;
+        }) > 3)
+      return false;
+
+    for (Piece piece : {Pieces::PAWN, Pieces::ROOK, Pieces::QUEEN})
+      if (std::ranges::count(square_to_piece, piece))
+        return false;
+
+    return true;
   }
 
   constexpr void generate_regular_moves(MoveList &move_list) const {
@@ -209,7 +223,7 @@ struct Board {
         castling_attack_masks = {0x70, 0x1C, 0x7000000000000000,
                                  0x1c00000000000000};
 
-    Bitboard threats_bb = threats(stm.opponent());
+    Bitboard threats_bb = threats(~stm);
     size_t castling_rank = stm == Sides::WHITE ? 0 : 7;
     Square king_square(castling_rank, 4);
 
@@ -265,8 +279,7 @@ struct Board {
 
     while (bb) {
       Square from = bb.pop_lsb();
-      Bitboard attacks =
-          pawn_attacks[stm][from] & side_occupancy[stm.opponent()];
+      Bitboard attacks = pawn_attacks[stm][from] & side_occupancy[~stm];
 
       while (attacks) {
         Square to = attacks.pop_lsb();
@@ -281,8 +294,8 @@ struct Board {
     }
 
     if (en_passant_square != Squares::NONE) {
-      Bitboard attackers = pawn_attacks[stm.opponent()][en_passant_square] &
-                           pieces[stm][Pieces::PAWN];
+      Bitboard attackers =
+          pawn_attacks[~stm][en_passant_square] & pieces[stm][Pieces::PAWN];
 
       while (attackers) {
         Square from = attackers.pop_lsb();
@@ -302,17 +315,38 @@ struct Board {
   };
 
   constexpr int evaluation() const {
-    auto eval_side = [&](Side side) {
-      return std::ranges::fold_left(
-          std::views::transform(Pieces::ALL,
-                                [&](Piece piece) {
-                                  return pieces[side][piece].popcount() *
-                                         piece.value();
-                                }),
-          0, std::plus{});
-    };
+    using namespace Eval;
 
-    return eval_side(stm) - eval_side(stm.opponent());
+    Sides::Array<int> mg_side_eval{}, eg_side_eval{};
+    int gamephase = 0;
+
+    for (Square square : Squares::ALL) {
+      Piece piece = square_to_piece[square];
+
+      if (piece != Pieces::NONE) {
+        if (pieces[Sides::WHITE][piece] & Bitboard(square)) {
+          mg_side_eval[Sides::WHITE] +=
+              mg_value[piece] +
+              mg_pesto_table[piece][Square(square.raw() ^ 56)];
+          eg_side_eval[Sides::WHITE] +=
+              eg_value[piece] +
+              eg_pesto_table[piece][Square(square.raw() ^ 56)];
+        } else {
+          mg_side_eval[Sides::BLACK] +=
+              mg_value[piece] + mg_pesto_table[piece][square];
+          eg_side_eval[Sides::BLACK] +=
+              eg_value[piece] + eg_pesto_table[piece][square];
+        }
+
+        gamephase += gamephase_inc[piece];
+      }
+    }
+
+    int mg_score = mg_side_eval[stm] - mg_side_eval[~stm],
+        eg_score = eg_side_eval[stm] - eg_side_eval[~stm],
+        mg_phase = std::min(gamephase, 24), eg_phase = 24 - mg_phase;
+
+    return (mg_score * mg_phase + eg_score * eg_phase) / 24;
   }
 
   constexpr bool move_comparator(Move a, Move b) const {
@@ -338,7 +372,8 @@ struct Board {
 
     for (auto [square, piece] : std::views::zip(Squares::ALL, square_to_piece))
       if (piece != Pieces::NONE) {
-        Side side = (pieces[Sides::WHITE][piece] & Bitboard(square))
+
+        Side side = pieces[Sides::WHITE][piece] & Bitboard(square)
                         ? Sides::WHITE
                         : Sides::BLACK;
         hash ^= square_rands[square][piece][side];

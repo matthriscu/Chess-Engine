@@ -10,9 +10,9 @@ public:
 
   constexpr Side(Literal data) : data(data) {}
 
-  constexpr operator Literal() const { return static_cast<Literal>(data); }
+  constexpr operator Literal() const { return data; }
 
-  constexpr Side opponent() const {
+  constexpr Side operator~() const {
     return data == Literal::WHITE ? Literal::BLACK : Literal::WHITE;
   }
 

@@ -1,5 +1,6 @@
 #include "board.hpp"
 #include <chrono>
+#include <functional>
 
 class Searcher {
   static constexpr int INF = 1e9;
@@ -34,7 +35,7 @@ class Searcher {
 
     uint64_t hash = board.hash();
 
-    if (std::ranges::count(hashes, hash) == 2)
+    if (std::ranges::count(hashes, hash) == 2 || board.is_draw())
       return 0;
 
     hashes.push_back(hash);
@@ -83,7 +84,7 @@ class Searcher {
 
     uint64_t hash = board.hash();
 
-    if (std::ranges::count(hashes, hash) == 2)
+    if (std::ranges::count(hashes, hash) == 2 || board.is_draw())
       return 0;
 
     hashes.push_back(hash);

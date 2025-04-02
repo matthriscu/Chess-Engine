@@ -23,8 +23,7 @@ struct Move {
   constexpr Move() = default;
 
   constexpr Move(Square from, Square to, bool is_capture)
-      : data(from.raw() | (to.raw() << 6) |
-             (static_cast<int>(is_capture) << 14)) {}
+      : data(from.raw() | (to.raw() << 6) | (is_capture << 14)) {}
 
   constexpr Move(Square from, Square to, Special special)
       : Move(from, to, special == Special::EN_PASSANT) {
