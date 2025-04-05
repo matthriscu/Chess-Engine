@@ -1,7 +1,9 @@
 #include "board.hpp"
 #include "eval.hpp"
 #include "ttable.hpp"
+#include <algorithm>
 #include <chrono>
+#include <functional>
 
 class Searcher {
   std::vector<uint64_t> hashes;
@@ -14,24 +16,60 @@ class Searcher {
 
   bool is_time_up() {
     if (nodes_searched % 1024 == 0)
-      timed_out = std::chrono::steady_clock::now() >= deadline;
+      timed_out = best_global_move != Move() &&
+                  std::chrono::steady_clock::now() >= deadline;
 
     return timed_out;
+  }
+
+  MoveList sorted_moves(const Board &board, Move ttMove, bool qsearch = false) {
+    MoveList moves = board.pseudolegal_moves();
+
+    int num_moves;
+
+    num_moves = qsearch ? std::partition(moves.begin(), moves.end(),
+                                         std::mem_fn(&Move::is_capture)) -
+                              moves.begin()
+                        : moves.size();
+
+    std::array<int, MAX_MOVES> scores, indices;
+
+    for (int i = 0; i < num_moves; ++i) {
+      indices[i] = i;
+
+      if (moves[i] == ttMove)
+        scores[i] = 1000000;
+      else if (moves[i].is_capture())
+        scores[i] =
+            100 * Eval::mg_value[board.square_to_piece[moves[i].from()]] -
+            Eval::mg_value[moves[i].is_en_passant()
+                               ? Piece(Pieces::PAWN)
+                               : board.square_to_piece[moves[i].to()]];
+      else
+        scores[i] = 0;
+    }
+
+    insertion_sort(indices.begin(), indices.begin() + num_moves,
+                   [&](int a, int b) { return scores[a] > scores[b]; });
+
+    MoveList sorted_moves;
+
+    for (int i = 0; i < num_moves; ++i)
+      sorted_moves.add(moves[indices[i]]);
+
+    return sorted_moves;
   }
 
   int qsearch(const Board &board, int ply, int alpha, int beta) {
     if (is_time_up())
       return 0;
 
-    int stand_pat = Eval::eval(board), best_value = stand_pat;
-
-    alpha = std::max(alpha, stand_pat);
+    int stand_pat = Eval::eval(board);
 
     if (stand_pat >= beta)
       return stand_pat;
 
-    uint64_t hash = board.hash();
-    std::optional<TTNode> node = ttable.lookup(board.hash());
+    std::optional<TTNode> node = ttable.lookup(board.zobrist);
 
     if (node.has_value() &&
         (node->type == TTNode::Type::EXACT ||
@@ -49,28 +87,15 @@ class Searcher {
     if (board.is_draw())
       return 0;
 
-    int original_alpha = alpha;
-    MoveList moves = board.pseudolegal_moves();
+    alpha = std::max(alpha, stand_pat);
 
-    Move ttMove = node.and_then([](const TTNode &ttNode) {
-                        return std::optional{ttNode.best_move};
-                      })
-                      .value_or(Move());
-
-    std::ranges::stable_sort(moves, [&](Move a, Move b) {
-      if (a == ttMove)
-        return true;
-
-      if (b == ttMove)
-        return false;
-
-      return board.move_comparator(a, b);
-    });
-
-    hashes.push_back(hash);
+    int best_value = stand_pat, original_alpha = alpha;
     Move best_move{};
 
-    for (Move move : std::views::filter(moves, &Move::is_capture)) {
+    hashes.push_back(board.zobrist);
+
+    for (Move move : sorted_moves(
+             board, node.has_value() ? node->best_move : Move(), true)) {
       Board copy = board;
       copy.make_move(move);
 
@@ -97,7 +122,7 @@ class Searcher {
     hashes.pop_back();
     ++nodes_searched;
 
-    ttable.insert(hash, best_move, best_value, 0,
+    ttable.insert(board.zobrist, best_move, best_value, 0,
                   best_value <= original_alpha ? TTNode::Type::UPPERBOUND
                   : best_value >= beta         ? TTNode::Type::LOWERBOUND
                                                : TTNode::Type::EXACT);
@@ -110,8 +135,7 @@ class Searcher {
     if (is_time_up())
       return 0;
 
-    uint64_t hash = board.hash();
-    std::optional<TTNode> node = ttable.lookup(board.hash());
+    std::optional<TTNode> node = ttable.lookup(board.zobrist);
 
     if (ply > 0 && node.has_value() && node->depth >= depth &&
         (node->type == TTNode::Type::EXACT ||
@@ -129,33 +153,18 @@ class Searcher {
     if (depth == 0)
       return qsearch(board, ply, alpha, beta);
 
-    if (ply > 0 && (std::ranges::contains(hashes, hash) || board.is_draw()))
+    if (ply > 0 &&
+        (std::ranges::contains(hashes, board.zobrist) || board.is_draw()))
       return 0;
 
     bool first_move = true;
     int best_value = -INF, original_alpha = alpha;
     Move best_move{};
 
-    MoveList moves = board.pseudolegal_moves();
+    hashes.push_back(board.zobrist);
 
-    Move ttMove = node.and_then([](const TTNode &ttNode) {
-                        return std::optional{ttNode.best_move};
-                      })
-                      .value_or(Move());
-
-    std::ranges::stable_sort(moves, [&](Move a, Move b) {
-      if (a == ttMove)
-        return true;
-
-      if (b == ttMove)
-        return false;
-
-      return board.move_comparator(a, b);
-    });
-
-    hashes.push_back(hash);
-
-    for (Move move : moves) {
+    for (Move move :
+         sorted_moves(board, node.has_value() ? node->best_move : Move())) {
       Board copy = board;
       copy.make_move(move);
 
@@ -207,7 +216,7 @@ class Searcher {
     else if (best_value > CHECKMATE_THRESHOLD)
       tt_value += ply;
 
-    ttable.insert(hash, best_move, tt_value, depth,
+    ttable.insert(board.zobrist, best_move, tt_value, depth,
                   best_value <= original_alpha ? TTNode::Type::UPPERBOUND
                   : best_value >= beta         ? TTNode::Type::LOWERBOUND
                                                : TTNode::Type::EXACT);
@@ -226,6 +235,7 @@ public:
     nodes_searched = 0;
     timed_out = false;
     deadline = start + std::chrono::milliseconds(time);
+    best_global_move = Move();
 
     for (int depth = 1; !timed_out; ++depth) {
       pvs(board, depth);

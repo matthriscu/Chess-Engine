@@ -4,8 +4,7 @@
 #include "hashing.hpp"
 #include "movelist.hpp"
 #include "util.hpp"
-#include <algorithm>
-#include <functional>
+#include <cassert>
 
 struct Board {
   Sides::Array<Pieces::Array<Bitboard>> pieces;
@@ -16,6 +15,7 @@ struct Board {
   Square ep_square;
   Side stm;
   Sides::Array<std::array<bool, 2>> castling_rights;
+  uint64_t zobrist;
 
   constexpr Board() = default;
 
@@ -57,23 +57,28 @@ struct Board {
     castling_rights[Sides::BLACK][1] = tokens[2].contains('q');
     ep_square = Square(tokens[3]);
     std::from_chars(tokens[4].begin(), tokens[4].end(), halfmove_clock);
+    zobrist = hash();
   }
 
   constexpr void make_move(Move m) {
     auto add_piece = [&](Side side, Piece piece, Square square) {
       pieces[side][piece] |= Bitboard(square);
       square_to_piece[square] = piece;
+      zobrist ^= square_rands[square][piece][side];
     };
 
     auto remove_piece = [&](Side side, Piece piece, Square square) {
       pieces[side][piece] &= ~Bitboard(square);
       square_to_piece[square] = Pieces::NONE;
+      zobrist ^= square_rands[square][piece][side];
     };
 
     auto move_piece = [&](Side side, Piece piece, Square from, Square to) {
       pieces[side][piece] ^= Bitboard(from) | Bitboard(to);
       square_to_piece[from] = Pieces::NONE;
       square_to_piece[to] = piece;
+      zobrist ^=
+          square_rands[from][piece][side] ^ square_rands[to][piece][side];
     };
 
     Piece moved_piece = square_to_piece[m.from()];
@@ -88,17 +93,31 @@ struct Board {
     move_piece(stm, moved_piece, m.from(), m.to());
 
     if (moved_piece == Pieces::KING)
-      castling_rights[stm] = {};
+      for (int i = 0; i < 2; ++i)
+        if (castling_rights[stm][i]) {
+          castling_rights[stm][i] = false;
+          zobrist ^= castling_rands[stm][i];
+        }
 
-    if (m.from() == Squares::H1 || m.to() == Squares::H1)
+    if (castling_rights[Sides::WHITE][0] &&
+        (m.from() == Squares::H1 || m.to() == Squares::H1)) {
       castling_rights[Sides::WHITE][0] = false;
-    else if (m.from() == Squares::A1 || m.to() == Squares::A1)
+      zobrist ^= castling_rands[Sides::WHITE][0];
+    } else if (castling_rights[Sides::WHITE][1] &&
+               (m.from() == Squares::A1 || m.to() == Squares::A1)) {
       castling_rights[Sides::WHITE][1] = false;
+      zobrist ^= castling_rands[Sides::WHITE][1];
+    }
 
-    if (m.from() == Squares::H8 || m.to() == Squares::H8)
+    if (castling_rights[Sides::BLACK][0] &&
+        (m.from() == Squares::H8 || m.to() == Squares::H8)) {
       castling_rights[Sides::BLACK][0] = false;
-    else if (m.from() == Squares::A8 || m.to() == Squares::A8)
+      zobrist ^= castling_rands[Sides::BLACK][0];
+    } else if (castling_rights[Sides::BLACK][1] &&
+               (m.from() == Squares::A8 || m.to() == Squares::A8)) {
       castling_rights[Sides::BLACK][1] = false;
+      zobrist ^= castling_rands[Sides::BLACK][1];
+    }
 
     if (m.is_promotion()) {
       remove_piece(stm, Pieces::PAWN, m.to());
@@ -116,14 +135,19 @@ struct Board {
         move_piece(stm, Pieces::ROOK, Squares::A8, Squares::D8);
     }
 
+    if (ep_square != Squares::NONE)
+      zobrist ^= ep_rands[ep_square.file()];
+
     ep_square = Squares::NONE;
 
     if (m.is_double_push()) {
       Square ep_square_candidate = m.to().shift(
           stm == Sides::WHITE ? Direction::SOUTH : Direction::NORTH);
 
-      if (pieces[~stm][Pieces::PAWN] & pawn_attacks[stm][ep_square_candidate])
+      if (pieces[~stm][Pieces::PAWN] & pawn_attacks[stm][ep_square_candidate]) {
         ep_square = ep_square_candidate;
+        zobrist ^= ep_rands[ep_square.file()];
+      }
     }
 
     side_occupancy = {};
@@ -134,9 +158,10 @@ struct Board {
 
     general_occupancy =
         side_occupancy[Sides::WHITE] | side_occupancy[Sides::BLACK];
-    stm = ~stm;
     halfmove_clock =
         moved_piece == Pieces::PAWN || m.is_capture() ? 0 : halfmove_clock + 1;
+    stm = ~stm;
+    zobrist ^= stm_rand;
   }
 
   // Does not account for pins
@@ -300,32 +325,6 @@ struct Board {
 
     return moves;
   };
-
-  constexpr MoveList sorted_pseudolegal_moves() const {
-    MoveList moves = pseudolegal_moves();
-    std::ranges::stable_sort(moves,
-                             std::bind_front(&Board::move_comparator, this));
-
-    return moves;
-  }
-
-  constexpr bool move_comparator(Move a, Move b) const {
-    if (a.is_capture() && b.is_capture()) {
-      Piece a_attacker = square_to_piece[a.from()],
-            b_attacker = square_to_piece[b.from()],
-            a_victim = a.is_en_passant() ? Piece(Pieces::PAWN)
-                                         : square_to_piece[a.to()],
-            b_victim = b.is_en_passant() ? Piece(Pieces::PAWN)
-                                         : square_to_piece[b.to()];
-
-      if (a_victim == b_victim)
-        return a_attacker < b_attacker;
-
-      return a_victim > b_victim;
-    }
-
-    return a.is_capture();
-  }
 
   constexpr uint64_t hash() const {
     uint64_t hash = 0;

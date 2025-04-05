@@ -7,7 +7,7 @@ static constexpr std::size_t MAX_MOVES = 256;
 struct MoveList : public std::array<Move, MAX_MOVES> {
   constexpr std::size_t size() const { return len; }
 
-  constexpr const Move *end() const { return data() + len; }
+  constexpr Move *end() { return begin() + len; }
 
   template <typename... Params> constexpr void add(Params &&...params) {
     new (&(*this)[len++]) Move(std::forward<Params>(params)...);
