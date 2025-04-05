@@ -69,7 +69,7 @@ public:
     Bitboard bit = lsb();
     *this &= ~bit;
 
-    return Square(std::countr_zero(bit.data));
+    return Square(bit);
   }
 
   constexpr int popcount() const { return std::popcount(data); }

@@ -12,6 +12,7 @@
 #include "util.hpp"
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <print>
 #include <ranges>
 #include <vector>
@@ -171,13 +172,11 @@ struct Board {
   }
 
   constexpr bool is_legal() const {
-    return !is_attacked(
-        Square(std::countr_zero(pieces[~stm][Pieces::KING].raw())), stm);
+    return !is_attacked(Square(pieces[~stm][Pieces::KING]), stm);
   }
 
   constexpr bool is_check() const {
-    return is_attacked(
-        Square(std::countr_zero(pieces[stm][Pieces::KING].raw())), ~stm);
+    return is_attacked(Square(pieces[stm][Pieces::KING]), ~stm);
   }
 
   constexpr bool is_draw() const {
@@ -238,7 +237,6 @@ struct Board {
   }
 
   constexpr void generate_pawn_moves(MoveList &move_list) const {
-    // Function pointers to disambiguate templated functions
     Direction from, to;
 
     if (stm == Sides::WHITE) {
@@ -314,6 +312,14 @@ struct Board {
     return moves;
   };
 
+  constexpr MoveList sorted_pseudolegal_moves() const {
+    MoveList moves = pseudolegal_moves();
+    std::ranges::stable_sort(moves,
+                             std::bind_front(&Board::move_comparator, this));
+
+    return moves;
+  }
+
   constexpr int evaluation() const {
     using namespace Eval;
 
@@ -372,7 +378,6 @@ struct Board {
 
     for (auto [square, piece] : std::views::zip(Squares::ALL, square_to_piece))
       if (piece != Pieces::NONE) {
-
         Side side = pieces[Sides::WHITE][piece] & Bitboard(square)
                         ? Sides::WHITE
                         : Sides::BLACK;

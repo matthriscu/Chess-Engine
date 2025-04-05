@@ -46,27 +46,10 @@ public:
   constexpr operator Literal() const { return data; }
 
   constexpr char repr(Side side = Sides::BLACK) const {
-    return side == Sides::WHITE ? "PNBRQK."[raw()] : "pnbrqk."[raw()];
+    return (side == Sides::WHITE ? "PNBRQK." : "pnbrqk.")[raw()];
   }
 
   constexpr int raw() const { return static_cast<int>(data); }
-
-  constexpr int value() const {
-    switch (data) {
-    case Literal::PAWN:
-      return 1;
-    case Literal::KNIGHT:
-      return 3;
-    case Literal::BISHOP:
-      return 3;
-    case Literal::ROOK:
-      return 5;
-    case Literal::QUEEN:
-      return 9;
-    default:
-      return 0;
-    }
-  }
 
 private:
   Literal data;
