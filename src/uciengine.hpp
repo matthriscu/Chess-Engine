@@ -1,6 +1,5 @@
 #pragma once
 
-#include "board.hpp"
 #include "perft.hpp"
 #include "searcher.hpp"
 #include <iostream>

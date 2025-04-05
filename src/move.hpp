@@ -2,8 +2,6 @@
 
 #include "piece.hpp"
 #include "square.hpp"
-#include <cassert>
-#include <cstdint>
 
 enum class Special {
   DOUBLE_PUSH,
@@ -60,7 +58,7 @@ struct Move {
   constexpr bool is_en_passant() const { return (data & flags) == 5 << 12; }
 
   constexpr bool is_castle() const {
-    return (data & flags & ~(1 << 12)) == 2 << 12;
+    return !is_promotion() && (data & (2 << 12));
   }
 
   constexpr bool is_double_push() const { return (data & flags) == 1 << 12; }

@@ -1,2 +1,5 @@
-*.o
+build
+cute
+books
+stash
 main

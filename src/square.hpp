@@ -2,9 +2,7 @@
 
 #include "enumarray.hpp"
 #include "types.hpp"
-#include <algorithm>
 #include <print>
-#include <string>
 
 class Square {
 public:
@@ -54,11 +52,11 @@ public:
     case Direction::WEST:
     case Direction::NORTH_WEST:
     case Direction::SOUTH_WEST:
-      return Square(file() != 0 ? raw() + static_cast<int>(D) : raw());
+      return file() != 0 ? Square(raw() + static_cast<int>(D)) : *this;
     case Direction::EAST:
     case Direction::NORTH_EAST:
     case Direction::SOUTH_EAST:
-      return Square(file() != 7 ? raw() + static_cast<int>(D) : raw());
+      return file() != 7 ? Square(raw() + static_cast<int>(D)) : *this;
     default:
       return Literal::NONE;
     };

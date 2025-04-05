@@ -1,10 +1,7 @@
 #pragma once
 
 #include "bitboard.hpp"
-#include "enumarray.hpp"
 #include "magic.hpp"
-#include "piece.hpp"
-#include "types.hpp"
 
 inline constexpr Sides::Array<Squares::Array<Bitboard>> pawn_attacks = []() {
   Sides::Array<Squares::Array<Bitboard>> attacks;
@@ -74,14 +71,14 @@ constexpr Bitboard attacks_bb<Pieces::KING>(Square square, Bitboard) {
 template <>
 constexpr Bitboard attacks_bb<Pieces::BISHOP>(Square square,
                                               Bitboard occupied) {
-  FancyHash m = magics<Pieces::BISHOP>[square.raw()];
-  return m.attacks[((occupied.raw() | m.mask) * m.hash) >> (64 - 9)];
+  auto [attacks, mask, hash] = magics<Pieces::BISHOP>[square];
+  return attacks[((occupied.raw() | mask) * hash) >> (64 - 9)];
 }
 
 template <>
 constexpr Bitboard attacks_bb<Pieces::ROOK>(Square square, Bitboard occupied) {
-  FancyHash m = magics<Pieces::ROOK>[square.raw()];
-  return m.attacks[((occupied.raw() | m.mask) * m.hash) >> (64 - 12)];
+  auto [attacks, mask, hash] = magics<Pieces::ROOK>[square];
+  return attacks[((occupied.raw() | mask) * hash) >> (64 - 12)];
 }
 
 template <>

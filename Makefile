@@ -1,32 +1,33 @@
-# Compiler and flags
 CXX = g++
 CXXFLAGS = -std=c++23 -Wall -Wextra -O3
 
+# Directories
+SRC_DIR = src
+BUILD_DIR = build
+
 # Files
-SRC_FILES = $(wildcard *.cpp)
-OBJ_FILES = $(SRC_FILES:.cpp=.o)
+SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
+OBJ_FILES = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRC_FILES))
 EXE = main
 
-# Header files (that may not have a matching .cpp file)
-HEADER_FILES = $(wildcard *.hpp)
+HEADER_FILES = $(wildcard $(SRC_DIR)/*.hpp)
 
-# Default target
 all: $(EXE)
 
 run: $(EXE)
 	./$(EXE)
 
-# Linking the final executable
+# Link all object files into the executable
 $(EXE): $(OBJ_FILES)
 	$(CXX) $(OBJ_FILES) -o $(EXE) $(CXXFLAGS)
 
-# Compiling the object files
-%.o: %.cpp $(HEADER_FILES)
+# Compile source files into object files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(HEADER_FILES)
+	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean up build files
 clean:
-	rm -rf *.o $(EXE)
+	rm -rf $(BUILD_DIR) $(EXE)
 
-.PHONY: all clean
+.PHONY: all clean run
 

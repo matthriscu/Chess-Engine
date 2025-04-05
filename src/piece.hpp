@@ -1,6 +1,5 @@
 #pragma once
 
-#include "enumarray.hpp"
 #include "side.hpp"
 #include <print>
 

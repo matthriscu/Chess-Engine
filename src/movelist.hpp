@@ -1,7 +1,6 @@
 #pragma once
 
 #include "move.hpp"
-#include <cstddef>
 
 static constexpr std::size_t MAX_MOVES = 256;
 
@@ -10,7 +9,9 @@ struct MoveList : public std::array<Move, MAX_MOVES> {
 
   constexpr const Move *end() const { return data() + len; }
 
-  constexpr void push_back(Move move) { (*this)[len++] = move; }
+  template <typename... Params> constexpr void add(Params &&...params) {
+    new (&(*this)[len++]) Move(std::forward<Params>(params)...);
+  }
 
 private:
   std::size_t len = 0;

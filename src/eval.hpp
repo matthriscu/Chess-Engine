@@ -1,5 +1,11 @@
+#include "board.hpp"
 #include "piece.hpp"
 #include "square.hpp"
+
+inline constexpr int INF = std::numeric_limits<short>::max();
+inline constexpr int CHECKMATE = INF - 1;
+inline constexpr int MAX_PLY = 256;
+inline constexpr int CHECKMATE_THRESHOLD = CHECKMATE - MAX_PLY;
 
 namespace Eval {
 static constexpr Pieces::Array<Squares::Array<int>> mg_pesto_table{
@@ -129,6 +135,41 @@ static constexpr Pieces::Array<Squares::Array<int>> eg_pesto_table{
     -53, -34, -21, -11, -28, -14, -24, -43
     // clang-format on
 };
+
 static constexpr Pieces::Array<int> gamephase_inc{0, 1, 1, 2, 4, 0},
     mg_value{82, 337, 365, 477, 1025, 0}, eg_value{94, 281, 297, 512, 936, 0};
+
+constexpr int eval(const Board &board) {
+  using namespace Eval;
+
+  Sides::Array<int> mg_side_eval{}, eg_side_eval{};
+  int gamephase = 0;
+
+  for (Square square : Squares::ALL) {
+    Piece piece = board.square_to_piece[square];
+
+    if (piece != Pieces::NONE) {
+      if (board.pieces[Sides::WHITE][piece] & Bitboard(square)) {
+        mg_side_eval[Sides::WHITE] +=
+            mg_value[piece] + mg_pesto_table[piece][Square(square.raw() ^ 56)];
+        eg_side_eval[Sides::WHITE] +=
+            eg_value[piece] + eg_pesto_table[piece][Square(square.raw() ^ 56)];
+      } else {
+        mg_side_eval[Sides::BLACK] +=
+            mg_value[piece] + mg_pesto_table[piece][square];
+        eg_side_eval[Sides::BLACK] +=
+            eg_value[piece] + eg_pesto_table[piece][square];
+      }
+
+      gamephase += gamephase_inc[piece];
+    }
+  }
+
+  int mg_score = mg_side_eval[board.stm] - mg_side_eval[~board.stm],
+      eg_score = eg_side_eval[board.stm] - eg_side_eval[~board.stm],
+      mg_phase = std::min(gamephase, 24), eg_phase = 24 - mg_phase;
+
+  return std::clamp((mg_score * mg_phase + eg_score * eg_phase) / 24,
+                    -CHECKMATE, CHECKMATE);
+}
 }; // namespace Eval

@@ -1,8 +1,6 @@
 #pragma once
 
 #include "square.hpp"
-#include "types.hpp"
-#include <print>
 
 class Bitboard {
 public:
