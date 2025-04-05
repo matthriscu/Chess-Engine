@@ -352,7 +352,8 @@ struct Board {
         eg_score = eg_side_eval[stm] - eg_side_eval[~stm],
         mg_phase = std::min(gamephase, 24), eg_phase = 24 - mg_phase;
 
-    return (mg_score * mg_phase + eg_score * eg_phase) / 24;
+    return std::clamp((mg_score * mg_phase + eg_score * eg_phase) / 24,
+                      -CHECKMATE, CHECKMATE);
   }
 
   constexpr bool move_comparator(Move a, Move b) const {

@@ -1,23 +1,22 @@
 #include "board.hpp"
 #include "ttable.hpp"
+#include "types.hpp"
 #include <chrono>
+#include <iostream>
 
 class Searcher {
-  static constexpr int INF = 1e9;
-
   std::vector<uint64_t> hashes;
-  int nodes_searched = 0;
+  long nodes_searched = 0;
   bool timed_out = false;
   std::chrono::steady_clock::time_point deadline;
   Move best_move_iter;
+  int best_value_iter = -INF;
   TTable<1 << 22> ttable;
 
   bool is_time_up() {
-    if (++nodes_searched == 1024) {
+    if (nodes_searched % 1024 == 0)
       timed_out = std::chrono::steady_clock::now() >= deadline &&
                   best_move_iter != Move();
-      nodes_searched = 0;
-    }
 
     return timed_out;
   }
@@ -69,6 +68,8 @@ class Searcher {
 
   int pvs(const Board &board, int depth, int ply = 0, int alpha = -INF,
           int beta = INF) {
+    ++nodes_searched;
+
     if (is_time_up())
       return alpha;
 
@@ -77,8 +78,15 @@ class Searcher {
     if (ply > 0 && node.has_value() && node->depth >= depth &&
         (node->type == TTNode::Type::EXACT ||
          (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
-         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
+         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta))) {
+      if (node->value < -CHECKMATE_THRESHOLD)
+        return node->value + ply;
+
+      if (node->value > CHECKMATE_THRESHOLD)
+        return node->value - ply;
+
       return node->value;
+    }
 
     if (depth == 0)
       return qsearch(board, ply, alpha, beta);
@@ -90,10 +98,9 @@ class Searcher {
 
     hashes.push_back(hash);
 
-    bool first_move = true, found_legal_move = false;
-    int best_value = -INF;
+    bool first_move = true;
+    int best_value = -INF, original_alpha = alpha;
     Move best_move{};
-    int original_alpha = alpha;
 
     MoveList moves = board.pseudolegal_moves();
 
@@ -117,8 +124,6 @@ class Searcher {
       copy.make_move(move);
 
       if (copy.is_legal()) {
-        found_legal_move = true;
-
         int value;
 
         if (first_move) {
@@ -138,8 +143,10 @@ class Searcher {
           best_value = value;
           best_move = move;
 
-          if (ply == 0)
+          if (ply == 0) {
             best_move_iter = move;
+            best_value_iter = value;
+          }
         }
 
         alpha = std::max(alpha, value);
@@ -151,14 +158,21 @@ class Searcher {
 
     hashes.pop_back();
 
+    if (best_value == -INF)
+      best_value = board.is_check() ? ply - CHECKMATE : 0;
+
+    int tt_value = best_value;
+
+    if (best_value < -CHECKMATE_THRESHOLD)
+      tt_value -= ply;
+    else if (best_value > CHECKMATE_THRESHOLD)
+      tt_value += ply;
+
     if (!timed_out)
-      ttable.insert(hash, best_move, best_value, depth,
+      ttable.insert(hash, best_move, tt_value, depth,
                     best_value <= original_alpha ? TTNode::Type::UPPERBOUND
                     : best_value >= beta         ? TTNode::Type::LOWERBOUND
                                                  : TTNode::Type::EXACT);
-
-    if (!found_legal_move)
-      return board.is_check() ? ply - INF : 0;
 
     return best_value;
   }
@@ -170,23 +184,41 @@ public:
   }
 
   Move search(const Board &board, int time) {
+    auto start = std::chrono::steady_clock::now();
     nodes_searched = 0;
     timed_out = false;
-    deadline =
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(time);
+    deadline = start + std::chrono::milliseconds(time);
     best_move_iter = Move();
 
     Move best_move;
 
     for (int depth = 1;; ++depth) {
-      std::println("info depth {}", depth);
-
       pvs(board, depth);
 
       if (depth != 1 && timed_out)
         break;
 
       best_move = best_move_iter;
+
+      auto time_ms = duration_cast<std::chrono::milliseconds>(
+                         std::chrono::steady_clock::now() - start)
+                         .count() +
+                     1;
+
+      std::optional<int> moves_to_mate;
+
+      if (best_value_iter + CHECKMATE <= 100)
+        moves_to_mate = -(CHECKMATE + best_value_iter + 1) / 2;
+      else if (CHECKMATE - best_value_iter <= 100)
+        moves_to_mate = (CHECKMATE - best_value_iter + 1) / 2;
+
+      std::println("info depth {} nodes {} nps {} {} time {} pv {}", depth,
+                   nodes_searched, 1000 * nodes_searched / time_ms,
+                   moves_to_mate.has_value()
+                       ? std::string("mate ") + std::to_string(*moves_to_mate)
+                       : std::string("score cp ") +
+                             std::to_string(best_value_iter),
+                   time_ms, best_move.uci());
     }
 
     Board copy = board;

@@ -63,31 +63,33 @@ public:
       }
     } else if (command.starts_with("go")) {
       std::vector<std::string_view> tokens = string_tokenizer(command);
-      bool movetime = tokens[1] == "movetime";
 
-      size_t relevant_time_index =
-                 (movetime || position.stm == Sides::WHITE) ? 2 : 4,
-             relevant_increment_index = relevant_time_index + 4;
+      if (tokens.size() == 1 || tokens[1] == "infinite")
+        std::println("bestmove {}", searcher.search(position, 1e9).uci());
+      else if (tokens[1] == "movetime") {
+        int time = stoi(tokens[2]);
+        std::println("bestmove {}", searcher.search(position, time).uci());
+      } else if (tokens[1] == "wtime") {
+        int time = stoi(tokens[position.stm == Sides::WHITE ? 2 : 4]) / 20;
 
-      int time = stoi(tokens[relevant_time_index]);
+        if (tokens.size() > 5)
+          time += stoi(tokens[position.stm == Sides::WHITE ? 6 : 8]) / 2;
 
-      if (!movetime)
-        time /= 20;
-
-      if (relevant_increment_index < tokens.size())
-        time += stoi(tokens[relevant_increment_index]) / 2;
-
-      std::println("bestmove {}", searcher.search(position, time).uci());
-    } else if (command.starts_with("perft")) {
-      std::vector<std::string_view> tokens = string_tokenizer(command);
-
-      std::println("{}", perft(position, stoi(tokens[1])));
-    } else if (command.starts_with("splitperft")) {
-      std::vector<std::string_view> tokens = string_tokenizer(command);
-
-      splitperft(position, stoi(tokens[1]));
-    } else if (command == "ucinewgame")
-      searcher.clear();
+        std::println("bestmove {}", searcher.search(position, time).uci());
+      } else if (tokens[1] == "perft")
+        splitperft(position, stoi(tokens[2]));
+      else if (command == "ucinewgame")
+        searcher.clear();
+      // else if (command.starts_with("perft")) {
+      //   std::vector<std::string_view> tokens = string_tokenizer(command);
+      //
+      //   std::println("{}", perft(position, stoi(tokens[1])));
+      // } else if (command.starts_with("splitperft")) {
+      //   std::vector<std::string_view> tokens = string_tokenizer(command);
+      //
+      //   splitperft(position, stoi(tokens[1]));
+      // }
+    }
   }
 
   void play() {
