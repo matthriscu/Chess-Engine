@@ -75,9 +75,22 @@ class Searcher {
     if (board.is_draw())
       return 0;
 
+    alpha = std::max(alpha, stand_pat);
+
     std::optional<TTNode> node = ttable.lookup(board.zobrist);
 
-    alpha = std::max(alpha, stand_pat);
+    if (node.has_value() &&
+        (node->type == TTNode::Type::EXACT ||
+         (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
+         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta))) {
+      if (node->value < -CHECKMATE_THRESHOLD)
+        return node->value + ply;
+
+      if (node->value > CHECKMATE_THRESHOLD)
+        return node->value - ply;
+
+      return node->value;
+    }
 
     Move best_move{};
     int best_value = stand_pat, original_alpha = alpha;
@@ -112,7 +125,7 @@ class Searcher {
     hashes.pop_back();
 
     if (best_move != Move{})
-      ttable.insert(board.zobrist, best_move, 0, 0,
+      ttable.insert(board.zobrist, best_move, best_value, 0,
                     best_value <= original_alpha ? TTNode::Type::UPPERBOUND
                     : best_value >= beta         ? TTNode::Type::LOWERBOUND
                                                  : TTNode::Type::EXACT);
@@ -127,14 +140,27 @@ class Searcher {
 
     ++nodes_searched;
 
-    std::optional<TTNode> node = ttable.lookup(board.zobrist);
-
     if (depth == 0)
       return qsearch(board, ply, alpha, beta);
 
     if (ply > 0 &&
         (std::ranges::contains(hashes, board.zobrist) || board.is_draw()))
       return 0;
+
+    std::optional<TTNode> node = ttable.lookup(board.zobrist);
+
+    if (ply > 0 && node.has_value() && node->depth >= depth &&
+        (node->type == TTNode::Type::EXACT ||
+         (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
+         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta))) {
+      if (node->value < -CHECKMATE_THRESHOLD)
+        return node->value + ply;
+
+      if (node->value > CHECKMATE_THRESHOLD)
+        return node->value - ply;
+
+      return node->value;
+    }
 
     Move best_move{};
     int best_value = -INF, original_alpha = alpha;
@@ -176,7 +202,14 @@ class Searcher {
       best_global_move = best_move;
     }
 
-    ttable.insert(board.zobrist, best_move, 0, depth,
+    int tt_value = best_value;
+
+    if (best_value < -CHECKMATE_THRESHOLD)
+      tt_value -= ply;
+    else if (best_value > CHECKMATE_THRESHOLD)
+      tt_value += ply;
+
+    ttable.insert(board.zobrist, best_move, tt_value, depth,
                   best_value <= original_alpha ? TTNode::Type::UPPERBOUND
                   : best_value >= beta         ? TTNode::Type::LOWERBOUND
                                                : TTNode::Type::EXACT);
@@ -196,9 +229,10 @@ public:
     timed_out = false;
     deadline = start + std::chrono::milliseconds(time);
     best_global_move = Move();
-    best_global_value = -INF;
 
     for (int depth = 1;; ++depth) {
+      best_global_value = -INF;
+
       negamax(board, depth);
 
       if (timed_out)
@@ -223,8 +257,6 @@ public:
                        : std::string("score cp ") +
                              std::to_string(best_global_value),
                    time_ms, best_global_move.uci());
-
-      best_global_value = -INF;
     }
 
     Board copy = board;
