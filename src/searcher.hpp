@@ -22,9 +22,12 @@ class Searcher {
     return timed_out;
   }
 
-  int negamax(const Board &board, int depth, int ply = 0) {
+  int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
+              int beta = INF) {
     if (is_time_up())
       return 0;
+
+    ++nodes_searched;
 
     if (ply > 0 &&
         (std::ranges::contains(hashes, board.zobrist) || board.is_draw()))
@@ -43,7 +46,7 @@ class Searcher {
       copy.make_move(move);
 
       if (copy.is_legal()) {
-        int value = -negamax(copy, depth - 1, ply + 1);
+        int value = -negamax(copy, depth - 1, ply + 1, -beta, -alpha);
 
         if (timed_out) {
           hashes.pop_back();
@@ -54,11 +57,15 @@ class Searcher {
           best_value = value;
           best_move = move;
         }
+
+        alpha = std::max(alpha, value);
+
+        if (alpha >= beta)
+          break;
       }
     }
 
     hashes.pop_back();
-    ++nodes_searched;
 
     if (best_value == -INF)
       best_value = board.is_check() ? ply - CHECKMATE : 0;
@@ -117,8 +124,8 @@ public:
     Board copy = board;
     copy.make_move(best_global_move);
 
-    hashes.push_back(board.hash());
-    hashes.push_back(copy.hash());
+    hashes.push_back(board.zobrist);
+    hashes.push_back(copy.zobrist);
 
     return best_global_move;
   }
