@@ -93,7 +93,8 @@ class Searcher {
     }
 
     Move best_move{};
-    int best_value = stand_pat, original_alpha = alpha;
+    int best_value = stand_pat;
+    TTNode::Type tt_type = TTNode::Type::UPPERBOUND;
 
     hashes.push_back(board.zobrist);
 
@@ -110,25 +111,24 @@ class Searcher {
           return 0;
         }
 
-        if (value > best_value) {
-          best_value = value;
+        best_value = std::max(best_value, value);
+
+        if (value > alpha) {
+          alpha = value;
           best_move = move;
+          tt_type = TTNode::Type::EXACT;
         }
 
-        alpha = std::max(alpha, value);
-
-        if (alpha >= beta)
+        if (value >= beta) {
+          tt_type = TTNode::Type::LOWERBOUND;
           break;
+        }
       }
     }
 
     hashes.pop_back();
 
-    if (best_move != Move{})
-      ttable.insert(board.zobrist, best_move, best_value, 0,
-                    best_value <= original_alpha ? TTNode::Type::UPPERBOUND
-                    : best_value >= beta         ? TTNode::Type::LOWERBOUND
-                                                 : TTNode::Type::EXACT);
+    ttable.insert(board.zobrist, best_move, best_value, 0, tt_type);
 
     return best_value;
   }
@@ -163,7 +163,9 @@ class Searcher {
     }
 
     Move best_move{};
-    int best_value = -INF, original_alpha = alpha;
+    int best_value = -INF;
+    TTNode::Type tt_type = TTNode::Type::UPPERBOUND;
+    bool first_move = true;
 
     hashes.push_back(board.zobrist);
 
@@ -173,22 +175,35 @@ class Searcher {
       copy.make_move(move);
 
       if (copy.is_legal()) {
-        int value = -negamax(copy, depth - 1, ply + 1, -beta, -alpha);
+        int value;
+
+        if (first_move) {
+          first_move = false;
+          value = -negamax(copy, depth - 1, ply + 1, -beta, -alpha);
+        } else {
+          value = -negamax(copy, depth - 1, ply + 1, -alpha - 1, -alpha);
+
+          if (alpha < value && value < beta)
+            value = -negamax(copy, depth - 1, ply + 1, -beta, -alpha);
+        }
 
         if (timed_out) {
           hashes.pop_back();
           return 0;
         }
 
-        if (value > best_value) {
-          best_value = value;
+        best_value = std::max(best_value, value);
+
+        if (value > alpha) {
+          alpha = value;
           best_move = move;
+          tt_type = TTNode::Type::EXACT;
         }
 
-        alpha = std::max(alpha, value);
-
-        if (alpha >= beta)
+        if (value >= beta) {
+          tt_type = TTNode::Type::LOWERBOUND;
           break;
+        }
       }
     }
 
@@ -197,7 +212,7 @@ class Searcher {
     if (best_value == -INF)
       best_value = board.is_check() ? ply - CHECKMATE : 0;
 
-    if (ply == 0 && best_value > best_global_value) {
+    if (ply == 0) {
       best_global_value = best_value;
       best_global_move = best_move;
     }
@@ -209,10 +224,7 @@ class Searcher {
     else if (best_value > CHECKMATE_THRESHOLD)
       tt_value += ply;
 
-    ttable.insert(board.zobrist, best_move, tt_value, depth,
-                  best_value <= original_alpha ? TTNode::Type::UPPERBOUND
-                  : best_value >= beta         ? TTNode::Type::LOWERBOUND
-                                               : TTNode::Type::EXACT);
+    ttable.insert(board.zobrist, best_move, tt_value, depth, tt_type);
 
     return best_value;
   }
