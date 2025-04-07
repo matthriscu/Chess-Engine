@@ -169,8 +169,7 @@ class Searcher {
 
     hashes.push_back(board.zobrist);
 
-    for (Move move :
-         sorted_moves(board, node.has_value() ? node->best_move : Move())) {
+    for (Move move : board.pseudolegal_moves()) {
       Board copy = board;
       copy.make_move(move);
 
@@ -241,6 +240,7 @@ public:
     timed_out = false;
     deadline = start + std::chrono::milliseconds(time);
     best_global_move = Move();
+    best_global_value = -INF;
 
     for (int depth = 1;; ++depth) {
       best_global_value = -INF;
