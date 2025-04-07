@@ -22,6 +22,39 @@ class Searcher {
     return timed_out;
   }
 
+  MoveList sorted_moves(const Board &board, bool qsearch = false) {
+    static constexpr EnumArray<Piece::Literal, Pieces::Array<int>, 7>
+        mvv_lva_lookup{
+            // clang-format off
+            15, 14, 13, 12, 11, 10,
+            25, 24, 23, 22, 21, 20,
+            35, 34, 33, 32, 31, 30,
+            45, 44, 43, 42, 41, 40,
+            55, 54, 53, 52, 51, 50,
+            65, 64, 63, 62, 61, 60,
+             0,  0,  0,  0,  0,  0,
+            // clang-format on
+        };
+
+    MoveList moves = board.pseudolegal_moves();
+
+    int num_captures = std::partition(moves.begin(), moves.end(),
+                                      std::mem_fn(&Move::is_capture)) -
+                       moves.begin();
+
+    std::ranges::stable_sort(
+        moves.begin(), moves.begin() + num_captures, std::greater<int>{},
+        [&](Move m) {
+          return mvv_lva_lookup[board.square_to_piece[m.to()]]
+                               [board.square_to_piece[m.from()]];
+        });
+
+    if (qsearch)
+      moves.resize(num_captures);
+
+    return moves;
+  }
+
   int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
     if (is_time_up())
@@ -41,7 +74,7 @@ class Searcher {
 
     hashes.push_back(board.zobrist);
 
-    for (Move move : board.pseudolegal_moves()) {
+    for (Move move : sorted_moves(board)) {
       Board copy = board;
       copy.make_move(move);
 

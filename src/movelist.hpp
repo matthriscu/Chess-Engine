@@ -13,6 +13,8 @@ struct MoveList : public std::array<Move, MAX_MOVES> {
     new (&(*this)[len++]) Move(std::forward<Params>(params)...);
   }
 
+  constexpr void resize(std::size_t n) { len = n; }
+
 private:
   std::size_t len = 0;
 };
