@@ -55,6 +55,51 @@ class Searcher {
     return moves;
   }
 
+  int qsearch(const Board &board, int ply, int alpha, int beta) {
+    if (is_time_up())
+      return 0;
+
+    ++nodes_searched;
+
+    int stand_pat = Eval::eval(board);
+
+    if (stand_pat >= beta)
+      return stand_pat;
+
+    if (board.is_draw())
+      return 0;
+
+    alpha = std::max(alpha, stand_pat);
+
+    int best_value = stand_pat;
+
+    hashes.push_back(board.zobrist);
+
+    for (Move move : sorted_moves(board, true)) {
+      Board copy = board;
+      copy.make_move(move);
+
+      if (copy.is_legal()) {
+        int value = -qsearch(copy, ply + 1, -beta, -alpha);
+
+        if (timed_out) {
+          hashes.pop_back();
+          return 0;
+        }
+
+        best_value = std::max(best_value, value);
+        alpha = std::max(alpha, value);
+
+        if (alpha >= beta)
+          break;
+      }
+    }
+
+    hashes.pop_back();
+
+    return best_value;
+  }
+
   int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
     if (is_time_up())
@@ -67,7 +112,7 @@ class Searcher {
       return 0;
 
     if (depth == 0)
-      return Eval::eval(board);
+      return qsearch(board, ply, alpha, beta);
 
     Move best_move = Move();
     int best_value = -INF;
