@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++23 -Wall -Wextra -ggdb3
+CXXFLAGS = -std=c++23 -Wall -Wextra -O3
 
 # Directories
 SRC_DIR = src
