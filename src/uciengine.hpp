@@ -2,12 +2,14 @@
 
 #include "perft.hpp"
 #include "searcher.hpp"
+#include <future>
 #include <iostream>
 #include <numeric>
 
 class UCIEngine {
   Board position;
   Searcher searcher;
+  std::future<void> searcher_future;
 
 private:
   constexpr int stoi(std::string_view str) const {
@@ -79,32 +81,30 @@ public:
         }));
       }
     } else if (tokens[0] == "go") {
+      std::chrono::steady_clock::duration time{};
+
       if (tokens.size() == 1 || tokens[1] == "infinite")
-        std::println(
-            "bestmove {}",
-            searcher.search(position, std::chrono::milliseconds::max()).uci());
-      else if (tokens[1] == "movetime") {
-        std::println(
-            "bestmove {}",
-            searcher
-                .search(position, std::chrono::milliseconds{stoi(tokens[2])})
-                .uci());
-      } else if (tokens[1] == "wtime") {
-        int time = stoi(tokens[position.stm == Sides::WHITE ? 2 : 4]) / 20;
+        time = std::chrono::milliseconds{1'000'000'000};
+      else if (tokens[1] == "movetime")
+        time = std::chrono::milliseconds{stoi(tokens[2])};
+      else if (tokens[1] == "wtime") {
+        time = std::chrono::milliseconds{
+            stoi(tokens[position.stm == Sides::WHITE ? 2 : 4]) / 20};
 
         if (tokens.size() > 5)
-          time += stoi(tokens[position.stm == Sides::WHITE ? 6 : 8]) / 2;
+          time += std::chrono::milliseconds{
+              stoi(tokens[position.stm == Sides::WHITE ? 6 : 8]) / 2};
+      }
 
-        std::println(
-            "bestmove {}",
-            searcher.search(position, std::chrono::milliseconds{time}).uci());
-      } else if (tokens[1] == "perft")
-        std::println("{}", perft(position, stoi(tokens[2])));
-      else if (tokens[1] == "splitperft")
-        splitperft(position, stoi(tokens[2]));
-      else if (command == "ucinewgame")
-        searcher.clear();
-    } else if (tokens[0] == "perft")
+      searcher_future = std::async(std::launch::async, [this, time]() {
+        std::println("bestmove {}", searcher.search(position, time).uci());
+        std::cout.flush();
+      });
+    } else if (tokens[0] == "stop")
+      searcher.stop();
+    else if (tokens[0] == "ucinewgame")
+      searcher.clear();
+    else if (tokens[0] == "perft")
       std::println("{}", perft(position, stoi(tokens[1])));
     else if (tokens[0] == "splitperft")
       splitperft(position, stoi(tokens[1]));

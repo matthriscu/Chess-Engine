@@ -233,6 +233,8 @@ class Searcher {
   }
 
 public:
+  constexpr void stop() { timed_out = true; }
+
   constexpr void resize_ttable(std::size_t new_size) {
     ttable.resize(new_size);
   }
@@ -267,16 +269,17 @@ public:
       else if (CHECKMATE - best_root_value <= 100)
         moves_to_mate = (CHECKMATE - best_root_value + 1) / 2;
 
-      auto time = std::chrono::system_clock::now() - start;
+      auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::system_clock::now() - start)
+                         .count();
 
       std::println("info depth {} nodes {} nps {} score {} time {} pv {}",
                    depth, nodes_searched,
-                   static_cast<int>(nodes_searched / time.count()),
+                   static_cast<int>(1000 * nodes_searched / (time_ms + 1)),
                    moves_to_mate.has_value()
                        ? std::string("mate ") + std::to_string(*moves_to_mate)
                        : std::string("cp ") + std::to_string(best_root_value),
-                   std::chrono::duration_cast<std::chrono::milliseconds>(time),
-                   best_root_move.uci());
+                   time_ms, best_root_move.uci());
     }
 
     Board copy = board;
