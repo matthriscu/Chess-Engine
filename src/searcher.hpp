@@ -6,24 +6,27 @@
 #include <functional>
 
 class Searcher {
+  TTable ttable;
   std::vector<uint64_t> hashes;
+
   long nodes_searched;
-  bool timed_out = false;
-  std::chrono::steady_clock::time_point deadline;
-  Move best_global_move;
-  int best_global_value;
-  TTable<1 << 22> ttable;
+  bool timed_out;
+
+  std::chrono::system_clock::time_point start, deadline;
+
+  Move best_root_move;
+  int best_root_value;
 
   bool is_time_up() {
     if (nodes_searched % 1024 == 0)
-      timed_out = best_global_move != Move() &&
-                  std::chrono::steady_clock::now() >= deadline;
+      timed_out = best_root_move != Move{} &&
+                  std::chrono::system_clock::now() >= deadline;
 
     return timed_out;
   }
 
-  MoveList sorted_moves(const Board &board, Move tt_move,
-                        bool qsearch = false) {
+  constexpr MoveList sorted_moves(const Board &board, Move tt_move,
+                                  bool qsearch = false) const {
     static constexpr EnumArray<Piece::Literal, Pieces::Array<int>, 7>
         mvv_lva_lookup{
             // clang-format off
@@ -213,8 +216,8 @@ class Searcher {
       best_value = board.is_check() ? ply - CHECKMATE : 0;
 
     if (ply == 0) {
-      best_global_value = best_value;
-      best_global_move = best_move;
+      best_root_value = best_value;
+      best_root_move = best_move;
     }
 
     int tt_value = best_value;
@@ -230,53 +233,58 @@ class Searcher {
   }
 
 public:
+  constexpr void resize_ttable(std::size_t new_size) {
+    ttable.resize(new_size);
+  }
+
   constexpr void clear() {
     hashes.clear();
     ttable = {};
   }
 
-  Move search(const Board &board, int time) {
-    auto start = std::chrono::steady_clock::now();
+  Move search(const Board &board,
+              std::chrono::system_clock::duration duration) {
+    start = std::chrono::system_clock::now();
+    deadline = start + duration;
+
     nodes_searched = 0;
     timed_out = false;
-    deadline = start + std::chrono::milliseconds(time);
-    best_global_move = Move();
+
+    best_root_move = Move{};
 
     for (int depth = 1;; ++depth) {
-      best_global_value = -INF;
+      best_root_value = -INF;
 
       negamax(board, depth);
 
       if (timed_out)
         break;
 
-      auto time_ms = duration_cast<std::chrono::milliseconds>(
-                         std::chrono::steady_clock::now() - start)
-                         .count() +
-                     1;
-
       std::optional<int> moves_to_mate;
 
-      if (best_global_value + CHECKMATE <= 100)
-        moves_to_mate = -(CHECKMATE + best_global_value + 1) / 2;
-      else if (CHECKMATE - best_global_value <= 100)
-        moves_to_mate = (CHECKMATE - best_global_value + 1) / 2;
+      if (best_root_value + CHECKMATE <= 100)
+        moves_to_mate = -(CHECKMATE + best_root_value + 1) / 2;
+      else if (CHECKMATE - best_root_value <= 100)
+        moves_to_mate = (CHECKMATE - best_root_value + 1) / 2;
 
-      std::println("info depth {} nodes {} nps {} {} time {} pv {}", depth,
-                   nodes_searched, 1000 * nodes_searched / time_ms,
+      auto time = std::chrono::system_clock::now() - start;
+
+      std::println("info depth {} nodes {} nps {} score {} time {} pv {}",
+                   depth, nodes_searched,
+                   static_cast<int>(nodes_searched / time.count()),
                    moves_to_mate.has_value()
                        ? std::string("mate ") + std::to_string(*moves_to_mate)
-                       : std::string("score cp ") +
-                             std::to_string(best_global_value),
-                   time_ms, best_global_move.uci());
+                       : std::string("cp ") + std::to_string(best_root_value),
+                   std::chrono::duration_cast<std::chrono::milliseconds>(time),
+                   best_root_move.uci());
     }
 
     Board copy = board;
-    copy.make_move(best_global_move);
+    copy.make_move(best_root_move);
 
     hashes.push_back(board.zobrist);
     hashes.push_back(copy.zobrist);
 
-    return best_global_move;
+    return best_root_move;
   }
 };

@@ -3,6 +3,7 @@
 #include "perft.hpp"
 #include "searcher.hpp"
 #include <iostream>
+#include <numeric>
 
 class UCIEngine {
   Board position;
@@ -17,14 +18,31 @@ private:
 
 public:
   void process_command(std::string_view command) {
-    if (command == "uci")
-      std::puts("id name <name>\n"
-                "id author <author>\n"
+    std::vector<std::string_view> tokens = string_tokenizer(command);
+
+    if (tokens[0] == "uci")
+      std::puts("id name Sah Matt\n"
+                "id author Matei Hriscu\n"
                 "uciok");
-    else if (command == "isready")
+    else if (tokens[0] == "setoption") {
+      auto value_it = std::ranges::find(tokens, "value");
+
+      auto accumulator = [](const std::string &acc, std::string_view s) {
+        return acc + std::string(s);
+      };
+
+      std::string name = std::accumulate(tokens.begin() + 2, value_it,
+                                         std::string{}, accumulator);
+
+      if (name == "Hash")
+        searcher.resize_ttable(
+            stoi(std::accumulate(std::next(value_it), tokens.end(),
+                                 std::string{}, accumulator)) *
+            (1 << 20) / sizeof(TTNode));
+
+    } else if (tokens[0] == "isready")
       std::puts("readyok");
-    else if (command.starts_with("position")) {
-      std::vector<std::string_view> tokens = string_tokenizer(command);
+    else if (tokens[0].starts_with("position")) {
 
       size_t moves_list_start;
 
@@ -60,35 +78,36 @@ public:
           return (m.raw() & mask) == (move.raw() & mask);
         }));
       }
-    } else if (command.starts_with("go")) {
-      std::vector<std::string_view> tokens = string_tokenizer(command);
-
+    } else if (tokens[0] == "go") {
       if (tokens.size() == 1 || tokens[1] == "infinite")
-        std::println("bestmove {}", searcher.search(position, 1e9).uci());
+        std::println(
+            "bestmove {}",
+            searcher.search(position, std::chrono::milliseconds::max()).uci());
       else if (tokens[1] == "movetime") {
-        int time = stoi(tokens[2]);
-        std::println("bestmove {}", searcher.search(position, time).uci());
+        std::println(
+            "bestmove {}",
+            searcher
+                .search(position, std::chrono::milliseconds{stoi(tokens[2])})
+                .uci());
       } else if (tokens[1] == "wtime") {
         int time = stoi(tokens[position.stm == Sides::WHITE ? 2 : 4]) / 20;
 
         if (tokens.size() > 5)
           time += stoi(tokens[position.stm == Sides::WHITE ? 6 : 8]) / 2;
 
-        std::println("bestmove {}", searcher.search(position, time).uci());
+        std::println(
+            "bestmove {}",
+            searcher.search(position, std::chrono::milliseconds{time}).uci());
       } else if (tokens[1] == "perft")
+        std::println("{}", perft(position, stoi(tokens[2])));
+      else if (tokens[1] == "splitperft")
         splitperft(position, stoi(tokens[2]));
       else if (command == "ucinewgame")
         searcher.clear();
-      // else if (command.starts_with("perft")) {
-      //   std::vector<std::string_view> tokens = string_tokenizer(command);
-      //
-      //   std::println("{}", perft(position, stoi(tokens[1])));
-      // } else if (command.starts_with("splitperft")) {
-      //   std::vector<std::string_view> tokens = string_tokenizer(command);
-      //
-      //   splitperft(position, stoi(tokens[1]));
-      // }
-    }
+    } else if (tokens[0] == "perft")
+      std::println("{}", perft(position, stoi(tokens[1])));
+    else if (tokens[0] == "splitperft")
+      splitperft(position, stoi(tokens[1]));
   }
 
   void play() {
