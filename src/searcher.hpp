@@ -1,29 +1,33 @@
 #include "board.hpp"
 #include "eval.hpp"
+#include "move.hpp"
 #include "ttable.hpp"
 #include <algorithm>
 #include <chrono>
 #include <functional>
 
 class Searcher {
-  std::vector<uint64_t> hashes;
-  long nodes_searched;
+  TTable ttable{};
+  std::vector<uint64_t> hashes{};
+
+  long nodes_searched = 0;
   bool timed_out = false;
-  std::chrono::steady_clock::time_point deadline;
-  Move best_global_move;
-  int best_global_value;
-  TTable<1 << 22> ttable;
+
+  std::chrono::system_clock::time_point start, deadline;
+
+  Move best_root_move;
+  int best_root_value;
 
   bool is_time_up() {
     if (nodes_searched % 1024 == 0)
-      timed_out = best_global_move != Move() &&
-                  std::chrono::steady_clock::now() >= deadline;
+      timed_out = best_root_move != Move{} &&
+                  std::chrono::system_clock::now() >= deadline;
 
     return timed_out;
   }
 
-  MoveList sorted_moves(const Board &board, Move tt_move,
-                        bool qsearch = false) {
+  template <bool QSearch = false>
+  constexpr MoveList sorted_moves(const Board &board, Move tt_move) const {
     static constexpr EnumArray<Piece::Literal, Pieces::Array<int>, 7>
         mvv_lva_lookup{
             // clang-format off
@@ -39,24 +43,34 @@ class Searcher {
 
     MoveList moves = board.pseudolegal_moves();
 
-    int num_captures = std::partition(moves.begin(), moves.end(),
-                                      std::mem_fn(&Move::is_capture)) -
-                       moves.begin();
+    if constexpr (QSearch)
+      moves.resize(std::remove_if(moves.begin(), moves.end(),
+                                  [](Move m) { return !m.is_capture(); }) -
+                   moves.begin());
 
-    std::ranges::stable_sort(
-        moves.begin(), moves.begin() + num_captures, std::greater<int>{},
-        [&](Move m) {
-          return mvv_lva_lookup[board.square_to_piece[m.to()]]
-                               [board.square_to_piece[m.from()]];
+    std::array<ScoredMove, MAX_MOVES> scored_moves;
+
+    std::transform(
+        moves.begin(), moves.end(), scored_moves.begin(), [&](Move move) {
+          uint16_t score;
+
+          if (move == tt_move)
+            score = 20000;
+          else if (move.is_capture())
+            score = 10000 + mvv_lva_lookup[board.square_to_piece[move.to()]]
+                                          [board.square_to_piece[move.from()]];
+          else
+            score = 0;
+
+          return ScoredMove(score, move);
         });
 
-    auto it = std::find(moves.begin(), moves.end(), tt_move);
+    std::stable_sort(scored_moves.begin(), scored_moves.begin() + moves.size(),
+                     std::greater<>{});
 
-    if (it != moves.end())
-      std::rotate(moves.begin(), it, it + 1);
-
-    if (qsearch)
-      moves.resize(num_captures);
+    std::transform(scored_moves.begin(), scored_moves.begin() + moves.size(),
+                   moves.begin(),
+                   [](ScoredMove scored_move) { return scored_move; });
 
     return moves;
   }
@@ -77,20 +91,13 @@ class Searcher {
 
     alpha = std::max(alpha, stand_pat);
 
-    std::optional<TTNode> node = ttable.lookup(board.zobrist);
+    std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
 
     if (node.has_value() &&
         (node->type == TTNode::Type::EXACT ||
          (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
-         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta))) {
-      if (node->value < -CHECKMATE_THRESHOLD)
-        return node->value + ply;
-
-      if (node->value > CHECKMATE_THRESHOLD)
-        return node->value - ply;
-
+         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
       return node->value;
-    }
 
     Move best_move{};
     int best_value = stand_pat;
@@ -98,8 +105,8 @@ class Searcher {
 
     hashes.push_back(board.zobrist);
 
-    for (Move move : sorted_moves(
-             board, node.has_value() ? node->best_move : Move(), true)) {
+    for (Move move : sorted_moves<true>(
+             board, node.has_value() ? node->best_move : Move())) {
       Board copy = board;
       copy.make_move(move);
 
@@ -128,7 +135,7 @@ class Searcher {
 
     hashes.pop_back();
 
-    ttable.insert(board.zobrist, best_move, best_value, 0, tt_type);
+    ttable.insert(board.zobrist, best_move, best_value, 0, tt_type, ply);
 
     return best_value;
   }
@@ -147,20 +154,13 @@ class Searcher {
         (std::ranges::contains(hashes, board.zobrist) || board.is_draw()))
       return 0;
 
-    std::optional<TTNode> node = ttable.lookup(board.zobrist);
+    std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
 
     if (ply > 0 && node.has_value() && node->depth >= depth &&
         (node->type == TTNode::Type::EXACT ||
          (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
-         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta))) {
-      if (node->value < -CHECKMATE_THRESHOLD)
-        return node->value + ply;
-
-      if (node->value > CHECKMATE_THRESHOLD)
-        return node->value - ply;
-
+         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
       return node->value;
-    }
 
     Move best_move{};
     int best_value = -INF;
@@ -213,70 +213,71 @@ class Searcher {
       best_value = board.is_check() ? ply - CHECKMATE : 0;
 
     if (ply == 0) {
-      best_global_value = best_value;
-      best_global_move = best_move;
+      best_root_value = best_value;
+      best_root_move = best_move;
     }
 
-    int tt_value = best_value;
-
-    if (best_value < -CHECKMATE_THRESHOLD)
-      tt_value -= ply;
-    else if (best_value > CHECKMATE_THRESHOLD)
-      tt_value += ply;
-
-    ttable.insert(board.zobrist, best_move, tt_value, depth, tt_type);
+    ttable.insert(board.zobrist, best_move, best_value, depth, tt_type, ply);
 
     return best_value;
   }
 
 public:
+  constexpr void stop() { timed_out = true; }
+
+  constexpr void resize_ttable(std::size_t new_size) {
+    ttable.resize(new_size);
+  }
+
   constexpr void clear() {
     hashes.clear();
     ttable = {};
   }
 
-  Move search(const Board &board, int time) {
-    auto start = std::chrono::steady_clock::now();
+  Move search(const Board &board,
+              std::chrono::system_clock::duration duration) {
+    start = std::chrono::system_clock::now();
+    deadline = start + duration;
+
     nodes_searched = 0;
     timed_out = false;
-    deadline = start + std::chrono::milliseconds(time);
-    best_global_move = Move();
+
+    best_root_move = Move{};
 
     for (int depth = 1;; ++depth) {
-      best_global_value = -INF;
+      best_root_value = -INF;
 
       negamax(board, depth);
 
       if (timed_out)
         break;
 
-      auto time_ms = duration_cast<std::chrono::milliseconds>(
-                         std::chrono::steady_clock::now() - start)
-                         .count() +
-                     1;
-
       std::optional<int> moves_to_mate;
 
-      if (best_global_value + CHECKMATE <= 100)
-        moves_to_mate = -(CHECKMATE + best_global_value + 1) / 2;
-      else if (CHECKMATE - best_global_value <= 100)
-        moves_to_mate = (CHECKMATE - best_global_value + 1) / 2;
+      if (best_root_value + CHECKMATE <= 100)
+        moves_to_mate = -(CHECKMATE + best_root_value + 1) / 2;
+      else if (CHECKMATE - best_root_value <= 100)
+        moves_to_mate = (CHECKMATE - best_root_value + 1) / 2;
 
-      std::println("info depth {} nodes {} nps {} {} time {} pv {}", depth,
-                   nodes_searched, 1000 * nodes_searched / time_ms,
+      auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::system_clock::now() - start)
+                         .count();
+
+      std::println("info depth {} nodes {} nps {} score {} time {} pv {}",
+                   depth, nodes_searched,
+                   static_cast<int>(1000 * nodes_searched / (time_ms + 1)),
                    moves_to_mate.has_value()
                        ? std::string("mate ") + std::to_string(*moves_to_mate)
-                       : std::string("score cp ") +
-                             std::to_string(best_global_value),
-                   time_ms, best_global_move.uci());
+                       : std::string("cp ") + std::to_string(best_root_value),
+                   time_ms, best_root_move.uci());
     }
 
     Board copy = board;
-    copy.make_move(best_global_move);
+    copy.make_move(best_root_move);
 
     hashes.push_back(board.zobrist);
     hashes.push_back(copy.zobrist);
 
-    return best_global_move;
+    return best_root_move;
   }
 };
