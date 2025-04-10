@@ -1,5 +1,6 @@
 #pragma once
 
+#include "eval.hpp"
 #include "move.hpp"
 #include <vector>
 
@@ -11,24 +12,41 @@ struct TTNode {
   Type type;
 };
 
-template <std::size_t N> class TTable {
+class TTable {
 public:
-  TTable() : table(N) {}
+  constexpr TTable() : size(1 << 22), table(size) {}
 
-  constexpr void insert(uint64_t hash, Move best_move, short value, short depth,
-                        TTNode::Type flag) {
-    table[hash % N] = {hash, best_move, value, depth, flag};
+  constexpr void resize(std::size_t new_size) {
+    size = new_size;
+    table.resize(new_size);
   }
 
-  constexpr std::optional<TTNode> lookup(uint64_t hash) const {
-    TTNode node = table[hash % N];
+  constexpr void insert(uint64_t hash, Move best_move, short value, short depth,
+                        TTNode::Type flag, int ply) {
+    if (value < -CHECKMATE_THRESHOLD)
+      value -= ply;
+    else if (value > CHECKMATE_THRESHOLD)
+      value += ply;
 
-    if (node.hash == hash)
+    table[hash % size] = {hash, best_move, value, depth, flag};
+  }
+
+  constexpr std::optional<TTNode> lookup(uint64_t hash, int ply) {
+    TTNode node = table[hash % size];
+
+    if (node.hash == hash) {
+      if (node.value < -CHECKMATE_THRESHOLD)
+        node.value += ply;
+      else if (node.value > CHECKMATE_THRESHOLD)
+        node.value -= ply;
+
       return node;
+    }
 
     return std::nullopt;
   }
 
 private:
+  std::size_t size;
   std::vector<TTNode> table;
 };
