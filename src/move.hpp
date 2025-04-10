@@ -80,12 +80,12 @@ struct Move {
 };
 
 struct ScoredMove : public Move {
-  uint16_t score;
+  uint32_t score;
 
   ScoredMove() = default;
 
   template <typename... Args>
-  ScoredMove(uint16_t score, Args &&...args)
+  ScoredMove(uint32_t score, Args &&...args)
       : Move(std::forward<Args>(args)...), score(score) {}
 
   constexpr auto operator<=>(const ScoredMove &other) const {

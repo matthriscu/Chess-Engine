@@ -9,6 +9,7 @@
 class Searcher {
   TTable ttable{};
   std::vector<uint64_t> hashes{};
+  Squares::Array<Squares::Array<int>> history{};
 
   long nodes_searched = 0;
   bool timed_out = false;
@@ -52,15 +53,16 @@ class Searcher {
 
     std::transform(
         moves.begin(), moves.end(), scored_moves.begin(), [&](Move move) {
-          uint16_t score;
+          uint32_t score;
 
           if (move == tt_move)
-            score = 20000;
+            score = std::numeric_limits<uint32_t>::max();
           else if (move.is_capture())
-            score = 10000 + mvv_lva_lookup[board.square_to_piece[move.to()]]
-                                          [board.square_to_piece[move.from()]];
+            score = 1'000'000'000 +
+                    mvv_lva_lookup[board.square_to_piece[move.to()]]
+                                  [board.square_to_piece[move.from()]];
           else
-            score = 0;
+            score = history[move.from()][move.to()];
 
           return ScoredMove(score, move);
         });
@@ -201,6 +203,7 @@ class Searcher {
         }
 
         if (value >= beta) {
+          history[move.from()][move.to()] += depth * depth;
           tt_type = TTNode::Type::LOWERBOUND;
           break;
         }
@@ -230,6 +233,7 @@ public:
   }
 
   constexpr void clear() {
+    history = {};
     hashes.clear();
     ttable = {};
   }
