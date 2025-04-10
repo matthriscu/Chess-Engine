@@ -8,7 +8,7 @@ BUILD_DIR = build
 # Files
 SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
 OBJ_FILES = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRC_FILES))
-EXE = main
+EXE = engine
 
 HEADER_FILES = $(wildcard $(SRC_DIR)/*.hpp)
 
