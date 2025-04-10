@@ -1,16 +1,17 @@
 #include "board.hpp"
 #include "eval.hpp"
+#include "move.hpp"
 #include "ttable.hpp"
 #include <algorithm>
 #include <chrono>
 #include <functional>
 
 class Searcher {
-  TTable ttable;
-  std::vector<uint64_t> hashes;
+  TTable ttable{};
+  std::vector<uint64_t> hashes{};
 
-  long nodes_searched;
-  bool timed_out;
+  long nodes_searched = 0;
+  bool timed_out = false;
 
   std::chrono::system_clock::time_point start, deadline;
 
@@ -25,8 +26,8 @@ class Searcher {
     return timed_out;
   }
 
-  constexpr MoveList sorted_moves(const Board &board, Move tt_move,
-                                  bool qsearch = false) const {
+  template <bool QSearch = false>
+  constexpr MoveList sorted_moves(const Board &board, Move tt_move) const {
     static constexpr EnumArray<Piece::Literal, Pieces::Array<int>, 7>
         mvv_lva_lookup{
             // clang-format off
@@ -42,24 +43,34 @@ class Searcher {
 
     MoveList moves = board.pseudolegal_moves();
 
-    int num_captures = std::partition(moves.begin(), moves.end(),
-                                      std::mem_fn(&Move::is_capture)) -
-                       moves.begin();
+    if constexpr (QSearch)
+      moves.resize(std::remove_if(moves.begin(), moves.end(),
+                                  [](Move m) { return !m.is_capture(); }) -
+                   moves.begin());
 
-    std::ranges::stable_sort(
-        moves.begin(), moves.begin() + num_captures, std::greater<int>{},
-        [&](Move m) {
-          return mvv_lva_lookup[board.square_to_piece[m.to()]]
-                               [board.square_to_piece[m.from()]];
+    std::array<ScoredMove, MAX_MOVES> scored_moves;
+
+    std::transform(
+        moves.begin(), moves.end(), scored_moves.begin(), [&](Move move) {
+          uint16_t score;
+
+          if (move == tt_move)
+            score = 20000;
+          else if (move.is_capture())
+            score = 10000 + mvv_lva_lookup[board.square_to_piece[move.to()]]
+                                          [board.square_to_piece[move.from()]];
+          else
+            score = 0;
+
+          return ScoredMove(score, move);
         });
 
-    auto it = std::find(moves.begin(), moves.end(), tt_move);
+    std::stable_sort(scored_moves.begin(), scored_moves.begin() + moves.size(),
+                     std::greater<>{});
 
-    if (it != moves.end())
-      std::rotate(moves.begin(), it, it + 1);
-
-    if (qsearch)
-      moves.resize(num_captures);
+    std::transform(scored_moves.begin(), scored_moves.begin() + moves.size(),
+                   moves.begin(),
+                   [](ScoredMove scored_move) { return scored_move; });
 
     return moves;
   }
@@ -101,8 +112,8 @@ class Searcher {
 
     hashes.push_back(board.zobrist);
 
-    for (Move move : sorted_moves(
-             board, node.has_value() ? node->best_move : Move(), true)) {
+    for (Move move : sorted_moves<true>(
+             board, node.has_value() ? node->best_move : Move())) {
       Board copy = board;
       copy.make_move(move);
 

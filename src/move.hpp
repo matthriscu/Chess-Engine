@@ -45,7 +45,7 @@ struct Move {
     data |= ((promoted_to_piece.raw() - 1) << 12) | (1 << 15);
   }
 
-  constexpr auto operator<=>(const Move &) const = default;
+  constexpr bool operator==(Move other) const { return data == other.data; }
 
   constexpr Square from() const { return Square(data & 0b111111); }
 
@@ -77,4 +77,18 @@ struct Move {
 
     return ans;
   }
+};
+
+struct ScoredMove : public Move {
+  uint16_t score;
+
+  ScoredMove() = default;
+
+  template <typename... Args>
+  ScoredMove(uint16_t score, Args &&...args)
+      : Move(std::forward<Args>(args)...), score(score) {}
+
+  constexpr auto operator<=>(const ScoredMove &other) const {
+    return score <=> other.score;
+  };
 };
