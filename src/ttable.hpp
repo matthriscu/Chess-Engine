@@ -1,5 +1,6 @@
 #pragma once
 
+#include "eval.hpp"
 #include "move.hpp"
 #include <vector>
 
@@ -21,15 +22,26 @@ public:
   }
 
   constexpr void insert(uint64_t hash, Move best_move, short value, short depth,
-                        TTNode::Type flag) {
+                        TTNode::Type flag, int ply) {
+    if (value < -CHECKMATE_THRESHOLD)
+      value -= ply;
+    else if (value > CHECKMATE_THRESHOLD)
+      value += ply;
+
     table[hash % size] = {hash, best_move, value, depth, flag};
   }
 
-  constexpr std::optional<TTNode> lookup(uint64_t hash) const {
+  constexpr std::optional<TTNode> lookup(uint64_t hash, int ply) {
     TTNode node = table[hash % size];
 
-    if (node.hash == hash)
+    if (node.hash == hash) {
+      if (node.value < -CHECKMATE_THRESHOLD)
+        node.value += ply;
+      else if (node.value > CHECKMATE_THRESHOLD)
+        node.value -= ply;
+
       return node;
+    }
 
     return std::nullopt;
   }

@@ -7,7 +7,8 @@
 #include <numeric>
 
 class UCIEngine {
-  Board position;
+  Board position =
+      Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   Searcher searcher;
   std::future<void> searcher_future;
 

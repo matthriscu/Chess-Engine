@@ -91,20 +91,13 @@ class Searcher {
 
     alpha = std::max(alpha, stand_pat);
 
-    std::optional<TTNode> node = ttable.lookup(board.zobrist);
+    std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
 
     if (node.has_value() &&
         (node->type == TTNode::Type::EXACT ||
          (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
-         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta))) {
-      if (node->value < -CHECKMATE_THRESHOLD)
-        return node->value + ply;
-
-      if (node->value > CHECKMATE_THRESHOLD)
-        return node->value - ply;
-
+         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
       return node->value;
-    }
 
     Move best_move{};
     int best_value = stand_pat;
@@ -142,7 +135,7 @@ class Searcher {
 
     hashes.pop_back();
 
-    ttable.insert(board.zobrist, best_move, best_value, 0, tt_type);
+    ttable.insert(board.zobrist, best_move, best_value, 0, tt_type, ply);
 
     return best_value;
   }
@@ -161,20 +154,13 @@ class Searcher {
         (std::ranges::contains(hashes, board.zobrist) || board.is_draw()))
       return 0;
 
-    std::optional<TTNode> node = ttable.lookup(board.zobrist);
+    std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
 
     if (ply > 0 && node.has_value() && node->depth >= depth &&
         (node->type == TTNode::Type::EXACT ||
          (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
-         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta))) {
-      if (node->value < -CHECKMATE_THRESHOLD)
-        return node->value + ply;
-
-      if (node->value > CHECKMATE_THRESHOLD)
-        return node->value - ply;
-
+         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
       return node->value;
-    }
 
     Move best_move{};
     int best_value = -INF;
@@ -231,14 +217,7 @@ class Searcher {
       best_root_move = best_move;
     }
 
-    int tt_value = best_value;
-
-    if (best_value < -CHECKMATE_THRESHOLD)
-      tt_value -= ply;
-    else if (best_value > CHECKMATE_THRESHOLD)
-      tt_value += ply;
-
-    ttable.insert(board.zobrist, best_move, tt_value, depth, tt_type);
+    ttable.insert(board.zobrist, best_move, best_value, depth, tt_type, ply);
 
     return best_value;
   }
