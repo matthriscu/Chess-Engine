@@ -139,6 +139,7 @@ class Searcher {
     return best_value;
   }
 
+  template <bool PV>
   int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
     if (is_time_up())
@@ -153,11 +154,19 @@ class Searcher {
 
     std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
 
-    if (ply > 0 && node.has_value() && node->depth >= depth &&
-        (node->type == TTNode::Type::EXACT ||
-         (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
-         (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
-      return node->value;
+    if constexpr (!PV) {
+      if (node.has_value() && node->depth >= depth &&
+          (node->type == TTNode::Type::EXACT ||
+           (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
+           (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
+        return node->value;
+
+      if (!board.is_check())
+        if (int static_eval = Eval::eval(board);
+            static_eval < CHECKMATE_THRESHOLD &&
+            static_eval >= beta + depth * 100)
+          return static_eval;
+    }
 
     Move best_move{};
     int best_value = -INF;
@@ -174,14 +183,14 @@ class Searcher {
       if (copy.is_legal()) {
         int value;
 
-        if (first_move) {
+        if (!PV || first_move) {
           first_move = false;
-          value = -negamax(copy, depth - 1, ply + 1, -beta, -alpha);
+          value = -negamax<PV>(copy, depth - 1, ply + 1, -beta, -alpha);
         } else {
-          value = -negamax(copy, depth - 1, ply + 1, -alpha - 1, -alpha);
+          value = -negamax<false>(copy, depth - 1, ply + 1, -alpha - 1, -alpha);
 
           if (alpha < value && value < beta)
-            value = -negamax(copy, depth - 1, ply + 1, -beta, -alpha);
+            value = -negamax<true>(copy, depth - 1, ply + 1, -beta, -alpha);
         }
 
         if (timed_out) {
@@ -255,7 +264,7 @@ public:
       }
 
       while (true) {
-        int current = negamax(board, depth, 0, alpha, beta);
+        int current = negamax<true>(board, depth, 0, alpha, beta);
 
         if (timed_out)
           break;
