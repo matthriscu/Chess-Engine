@@ -159,6 +159,13 @@ class Searcher {
          (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
       return node->value;
 
+    int static_eval = Eval::eval(board);
+
+    if (beta - alpha <= 1 && static_eval < CHECKMATE_THRESHOLD) {
+      if (depth <= 4 && static_eval >= beta + depth * 100)
+        return static_eval;
+    }
+
     Move best_move{};
     int best_value = -INF;
     TTNode::Type tt_type = TTNode::Type::UPPERBOUND;
