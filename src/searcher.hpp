@@ -17,10 +17,9 @@ class Searcher {
   std::chrono::system_clock::time_point start, deadline;
 
   Move best_root_move;
-  int best_root_value;
 
   bool is_time_up() {
-    if (nodes_searched % 1024 == 0)
+    if (++nodes_searched % 1024 == 0)
       timed_out = best_root_move != Move{} &&
                   std::chrono::system_clock::now() >= deadline;
 
@@ -80,8 +79,6 @@ class Searcher {
   int qsearch(const Board &board, int ply, int alpha, int beta) {
     if (is_time_up())
       return 0;
-
-    ++nodes_searched;
 
     int stand_pat = Eval::eval(board);
 
@@ -146,8 +143,6 @@ class Searcher {
               int beta = INF) {
     if (is_time_up())
       return 0;
-
-    ++nodes_searched;
 
     if (depth == 0)
       return qsearch(board, ply, alpha, beta);
@@ -215,10 +210,8 @@ class Searcher {
     if (best_value == -INF)
       best_value = board.is_check() ? ply - CHECKMATE : 0;
 
-    if (ply == 0) {
-      best_root_value = best_value;
+    if (ply == 0 && best_move != Move{})
       best_root_move = best_move;
-    }
 
     ttable.insert(board.zobrist, best_move, best_value, depth, tt_type, ply);
 
@@ -248,10 +241,36 @@ public:
 
     best_root_move = Move{};
 
-    for (int depth = 1;; ++depth) {
-      best_root_value = -INF;
+    int best_root_value = -INF;
 
-      negamax(board, depth);
+    for (int depth = 1;; ++depth) {
+      int alpha = -INF, beta = INF, delta = 30;
+
+      if (depth == 1) {
+        alpha = -INF;
+        beta = INF;
+      } else {
+        alpha = best_root_value - delta;
+        beta = best_root_value + delta;
+      }
+
+      while (true) {
+        int current = negamax(board, depth, 0, alpha, beta);
+
+        if (timed_out)
+          break;
+
+        if (current <= alpha)
+          alpha -= delta;
+        else if (current >= beta)
+          beta += delta;
+        else {
+          best_root_value = current;
+          break;
+        }
+
+        delta *= 2;
+      }
 
       if (timed_out)
         break;
