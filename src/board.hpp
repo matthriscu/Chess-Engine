@@ -164,6 +164,18 @@ struct Board {
     zobrist ^= stm_rand;
   }
 
+  constexpr void make_null_move() {
+    if (ep_square != Squares::NONE)
+      zobrist ^= ep_rands[ep_square.file()];
+
+    ep_square = Squares::NONE;
+
+    stm = ~stm;
+    zobrist ^= stm_rand;
+
+    halfmove_clock = 0;
+  }
+
   // Does not account for pins
   constexpr Bitboard threats(Side side) const {
     Bitboard threats;
