@@ -161,11 +161,26 @@ class Searcher {
            (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
         return node->value;
 
-      if (!board.is_check())
+      const bool is_check = board.is_check();
+
+      if (!is_check)
         if (int static_eval = Eval::eval(board);
             static_eval < CHECKMATE_THRESHOLD &&
             static_eval >= beta + depth * 100)
           return static_eval;
+
+      if (!is_check || (board.side_occupancy[board.stm] !=
+                        (board.pieces[board.stm][Pieces::PAWN] |
+                         board.pieces[board.stm][Pieces::KING]))) {
+        Board copy = board;
+        copy.make_null_move();
+
+        int nmp_value = -negamax<false>(copy, std::max(depth - 3, 0), ply + 1,
+                                        -beta, -(beta - 1));
+
+        if (nmp_value >= beta)
+          return nmp_value;
+      }
     }
 
     Move best_move{};
