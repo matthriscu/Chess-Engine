@@ -19,6 +19,8 @@ class Searcher {
 
   Move best_root_move;
 
+  std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
+
   bool is_time_up() {
     if (++nodes_searched % 1024 == 0)
       timed_out = best_root_move != Move{} &&
@@ -28,7 +30,8 @@ class Searcher {
   }
 
   template <bool QSearch = false>
-  constexpr MoveList sorted_moves(const Board &board, Move tt_move) const {
+  constexpr MoveList sorted_moves(const Board &board, int ply,
+                                  Move tt_move) const {
     static constexpr EnumArray<Piece::Literal, Pieces::Array<int>, 7>
         mvv_lva_lookup{
             // clang-format off
@@ -61,6 +64,8 @@ class Searcher {
             score = 1'000'000'000 +
                     mvv_lva_lookup[board.square_to_piece[move.to()]]
                                   [board.square_to_piece[move.from()]];
+          else if (std::ranges::contains(killer_moves[ply], move))
+            score = 1'000'000'000;
           else
             score = history[move.from()][move.to()];
 
@@ -106,7 +111,7 @@ class Searcher {
     hashes.push_back(board.zobrist);
 
     for (Move move : sorted_moves<true>(
-             board, node.has_value() ? node->best_move : Move())) {
+             board, ply, node.has_value() ? node->best_move : Move())) {
       Board copy = board;
       copy.make_move(move);
 
@@ -190,7 +195,7 @@ class Searcher {
     hashes.push_back(board.zobrist);
 
     for (auto [i, move] : std::views::enumerate(sorted_moves(
-             board, node.has_value() ? node->best_move : Move()))) {
+             board, ply, node.has_value() ? node->best_move : Move()))) {
       Board copy = board;
       copy.make_move(move);
 
@@ -228,6 +233,13 @@ class Searcher {
         }
 
         if (value >= beta) {
+          if (ply < MAX_PLY && !move.is_capture() && !move.is_promotion()) {
+            if (move == killer_moves[ply][0])
+              killer_moves[ply][1] = move;
+            else
+              killer_moves[ply][0] = move;
+          }
+
           history[move.from()][move.to()] += depth * depth;
           tt_type = TTNode::Type::LOWERBOUND;
           break;
@@ -270,6 +282,7 @@ public:
     timed_out = false;
 
     best_root_move = Move{};
+    killer_moves = {};
 
     int best_root_value = -INF;
 
