@@ -188,6 +188,9 @@ class Searcher {
       }
     }
 
+    if (depth >= 4 && !node.has_value())
+      --depth;
+
     Move best_move{};
     int best_value = -INF;
     TTNode::Type tt_type = TTNode::Type::UPPERBOUND;
