@@ -4,6 +4,7 @@
 #include "ttable.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <functional>
 
 class Searcher {
@@ -153,6 +154,7 @@ class Searcher {
       return 0;
 
     std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
+    const bool is_check = board.is_check();
 
     if constexpr (!PV) {
       if (node.has_value() && node->depth >= depth &&
@@ -160,8 +162,6 @@ class Searcher {
            (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
            (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
         return node->value;
-
-      const bool is_check = board.is_check();
 
       if (!is_check)
         if (int static_eval = Eval::eval(board);
@@ -186,27 +186,33 @@ class Searcher {
     Move best_move{};
     int best_value = -INF;
     TTNode::Type tt_type = TTNode::Type::UPPERBOUND;
-    bool first_move = true;
 
     hashes.push_back(board.zobrist);
 
-    for (Move move :
-         sorted_moves(board, node.has_value() ? node->best_move : Move())) {
+    for (auto [i, move] : std::views::enumerate(sorted_moves(
+             board, node.has_value() ? node->best_move : Move()))) {
       Board copy = board;
       copy.make_move(move);
 
+      int value;
+
       if (copy.is_legal()) {
-        int value;
+        if (depth >= 2 && i > (ply == 0) && !is_check) {
+          int reduction =
+                  0.8 + 0.4 * std::log(depth) * std::log(std::max(i + 1, 1L)),
+              reduced = depth - 1 - reduction;
 
-        if (!PV || first_move) {
-          first_move = false;
-          value = -negamax<PV>(copy, depth - 1, ply + 1, -beta, -alpha);
-        } else {
+          value = -negamax<false>(copy, reduced, ply + 1, -alpha - 1, -alpha);
+
+          if (value > alpha && reduced < depth)
+            value =
+                -negamax<false>(copy, depth - 1, ply + 1, -alpha - 1, -alpha);
+        } else if (!PV || i > 0) {
           value = -negamax<false>(copy, depth - 1, ply + 1, -alpha - 1, -alpha);
-
-          if (alpha < value && value < beta)
-            value = -negamax<true>(copy, depth - 1, ply + 1, -beta, -alpha);
         }
+
+        if (PV && (i == 0 || value > alpha))
+          value = -negamax<true>(copy, depth - 1, ply + 1, -beta, -alpha);
 
         if (timed_out) {
           hashes.pop_back();
