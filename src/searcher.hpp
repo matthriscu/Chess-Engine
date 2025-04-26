@@ -160,6 +160,7 @@ class Searcher {
 
     std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
     const bool is_check = board.is_check();
+    int static_eval = Eval::eval(board);
 
     if constexpr (!PV) {
       if (node.has_value() && node->depth >= depth &&
@@ -168,11 +169,9 @@ class Searcher {
            (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
         return node->value;
 
-      if (!is_check)
-        if (int static_eval = Eval::eval(board);
-            static_eval < CHECKMATE_THRESHOLD &&
-            static_eval >= beta + depth * 100)
-          return static_eval;
+      if (!is_check && static_eval < CHECKMATE_THRESHOLD &&
+          static_eval >= beta + depth * 100)
+        return static_eval;
 
       if (!is_check || (board.side_occupancy[board.stm] !=
                         (board.pieces[board.stm][Pieces::PAWN] |
@@ -191,6 +190,7 @@ class Searcher {
     Move best_move{};
     int best_value = -INF;
     TTNode::Type tt_type = TTNode::Type::UPPERBOUND;
+    bool skip_quiets = false;
 
     hashes.push_back(board.zobrist);
 
@@ -202,6 +202,16 @@ class Searcher {
       int value;
 
       if (copy.is_legal()) {
+        if (skip_quiets && move.is_quiet())
+          continue;
+
+        if (i > 0 && !PV && !is_check && best_value > -CHECKMATE_THRESHOLD &&
+            depth <= 6 && static_eval + 200 + depth * 150 <= alpha &&
+            move.is_quiet()) {
+          skip_quiets = true;
+          continue;
+        }
+
         if (depth >= 2 && i > (ply == 0) && !is_check) {
           int reduction =
                   0.8 + 0.4 * std::log(depth) * std::log(std::max(i + 1, 1L)),
@@ -233,7 +243,7 @@ class Searcher {
         }
 
         if (value >= beta) {
-          if (ply < MAX_PLY && !move.is_capture() && !move.is_promotion()) {
+          if (ply < MAX_PLY && move.is_quiet()) {
             if (move == killer_moves[ply][0])
               killer_moves[ply][1] = move;
             else
