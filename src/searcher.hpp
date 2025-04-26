@@ -2,6 +2,7 @@
 #include "eval.hpp"
 #include "move.hpp"
 #include "ttable.hpp"
+#include "tunable_params.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -22,7 +23,7 @@ class Searcher {
   std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
 
   bool is_time_up() {
-    if (++nodes_searched % 1024 == 0)
+    if (++nodes_searched % TIME_CHECK_FREQUENCY == 0)
       timed_out = best_root_move != Move{} &&
                   std::chrono::system_clock::now() >= deadline;
 
@@ -56,16 +57,18 @@ class Searcher {
 
     std::transform(
         moves.begin(), moves.end(), scored_moves.begin(), [&](Move move) {
+          static constexpr int CAPTURE_BASE = 1'000'000'000,
+                               KILLER_SCORE = CAPTURE_BASE;
           uint32_t score;
 
           if (move == tt_move)
             score = std::numeric_limits<uint32_t>::max();
           else if (move.is_capture())
-            score = 1'000'000'000 +
+            score = CAPTURE_BASE +
                     mvv_lva_lookup[board.square_to_piece[move.to()]]
                                   [board.square_to_piece[move.from()]];
           else if (std::ranges::contains(killer_moves[ply], move))
-            score = 1'000'000'000;
+            score = KILLER_SCORE;
           else
             score = history[move.from()][move.to()];
 
@@ -169,18 +172,21 @@ class Searcher {
            (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
         return node->value;
 
+      // RFP
       if (!is_check && static_eval < CHECKMATE_THRESHOLD &&
-          static_eval >= beta + depth * 100)
+          static_eval >= beta + depth * RFP_SCALE)
         return static_eval;
 
+      // NMP
       if (!is_check || (board.side_occupancy[board.stm] !=
                         (board.pieces[board.stm][Pieces::PAWN] |
                          board.pieces[board.stm][Pieces::KING]))) {
         Board copy = board;
         copy.make_null_move();
 
-        int nmp_value = -negamax<false>(copy, std::max(depth - 3, 0), ply + 1,
-                                        -beta, -(beta - 1));
+        int nmp_value =
+            -negamax<false>(copy, std::max(depth - NMP_DEPTH_REDUCTION, 0),
+                            ply + 1, -beta, -(beta - 1));
 
         if (nmp_value >= beta)
           return nmp_value;
@@ -205,16 +211,19 @@ class Searcher {
         if (skip_quiets && move.is_quiet())
           continue;
 
+        // FP
         if (i > 0 && !PV && !is_check && best_value > -CHECKMATE_THRESHOLD &&
-            depth <= 6 && static_eval + 200 + depth * 150 <= alpha &&
+            depth <= FP_MAX_DEPTH &&
+            static_eval + FP_BASE + depth * FP_SCALE <= alpha &&
             move.is_quiet()) {
           skip_quiets = true;
           continue;
         }
 
-        if (depth >= 2 && i > (ply == 0) && !is_check) {
-          int reduction =
-                  0.8 + 0.4 * std::log(depth) * std::log(std::max(i + 1, 1L)),
+        // LMR
+        if (depth >= LMR_MIN_DEPTH && i > (ply == 0) && !is_check) {
+          int reduction = LMR_A + LMR_B * std::log(depth) *
+                                      std::log(std::max(i + 1, 1L)),
               reduced = depth - 1 - reduction;
 
           value = -negamax<false>(copy, reduced, ply + 1, -alpha - 1, -alpha);
@@ -297,7 +306,7 @@ public:
     int best_root_value = -INF;
 
     for (int depth = 1;; ++depth) {
-      int alpha = -INF, beta = INF, delta = 30;
+      int alpha = -INF, beta = INF, delta = ASP_DELTA;
 
       if (depth == 1) {
         alpha = -INF;
@@ -322,7 +331,7 @@ public:
           break;
         }
 
-        delta *= 2;
+        delta *= ASP_MULTIPLIER;
       }
 
       if (timed_out)
@@ -330,9 +339,9 @@ public:
 
       std::optional<int> moves_to_mate;
 
-      if (best_root_value + CHECKMATE <= 100)
+      if (best_root_value + CHECKMATE <= MAX_PLY)
         moves_to_mate = -(CHECKMATE + best_root_value + 1) / 2;
-      else if (CHECKMATE - best_root_value <= 100)
+      else if (CHECKMATE - best_root_value <= MAX_PLY)
         moves_to_mate = (CHECKMATE - best_root_value + 1) / 2;
 
       auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
