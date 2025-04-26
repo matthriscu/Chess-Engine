@@ -63,6 +63,8 @@ struct Move {
 
   constexpr bool is_double_push() const { return (data & flags) == 1 << 12; }
 
+  constexpr bool is_quiet() const { return !is_capture() && !is_promotion(); }
+
   constexpr Piece promoted_to() const {
     return Piece(static_cast<Piece::Literal>(((data >> 12) & 0b11) + 1));
   }
