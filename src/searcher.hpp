@@ -13,21 +13,24 @@ class Searcher {
   std::vector<uint64_t> hashes{};
   Squares::Array<Squares::Array<int>> history{};
 
-  long nodes_searched = 0;
-  bool timed_out = false;
+  long nodes_searched;
+  bool cancel_search;
+  bool is_hard_limit;
 
   std::chrono::system_clock::time_point start, deadline;
+  long node_limit;
 
   Move best_root_move;
 
   std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
 
-  bool is_time_up() {
-    if (++nodes_searched % TIME_CHECK_FREQUENCY == 0)
-      timed_out = best_root_move != Move{} &&
-                  std::chrono::system_clock::now() >= deadline;
+  bool check_limit() {
+    if (nodes_searched % TIME_CHECK_FREQUENCY == 0)
+      cancel_search = best_root_move != Move{} &&
+                      (std::chrono::system_clock::now() >= deadline ||
+                       nodes_searched > node_limit);
 
-    return timed_out;
+    return cancel_search;
   }
 
   template <bool QSearch = false>
@@ -86,8 +89,10 @@ class Searcher {
   }
 
   int qsearch(const Board &board, int ply, int alpha, int beta) {
-    if (is_time_up())
+    if (is_hard_limit && check_limit())
       return 0;
+
+    ++nodes_searched;
 
     int stand_pat = Eval::eval(board);
 
@@ -121,7 +126,7 @@ class Searcher {
       if (copy.is_legal()) {
         int value = -qsearch(copy, ply + 1, -beta, -alpha);
 
-        if (timed_out) {
+        if (cancel_search) {
           hashes.pop_back();
           return 0;
         }
@@ -151,11 +156,13 @@ class Searcher {
   template <bool PV>
   int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
-    if (is_time_up())
+    if (is_hard_limit && check_limit())
       return 0;
 
     if (depth == 0)
       return qsearch(board, ply, alpha, beta);
+
+    ++nodes_searched;
 
     if (ply > 0 &&
         (std::ranges::contains(hashes, board.zobrist) || board.is_draw()))
@@ -229,7 +236,7 @@ class Searcher {
         if (PV && (i == 0 || value > alpha))
           value = -negamax<true>(copy, depth - 1, ply + 1, -beta, -alpha);
 
-        if (timed_out) {
+        if (cancel_search) {
           hashes.pop_back();
           return 0;
         }
@@ -271,7 +278,7 @@ class Searcher {
   }
 
 public:
-  constexpr void stop() { timed_out = true; }
+  constexpr void stop() { cancel_search = true; }
 
   constexpr void resize_ttable(std::size_t new_size) {
     ttable.resize(new_size);
@@ -283,20 +290,24 @@ public:
     ttable = {};
   }
 
-  Move search(const Board &board,
-              std::chrono::system_clock::duration duration) {
+  template <bool INFO = true>
+  Move search(const Board &board, std::chrono::system_clock::duration duration,
+              long max_nodes, long max_depth, bool hard_limit = true) {
     start = std::chrono::system_clock::now();
     deadline = start + duration;
+    node_limit = max_nodes;
+
+    is_hard_limit = hard_limit;
 
     nodes_searched = 0;
-    timed_out = false;
+    cancel_search = false;
 
     best_root_move = Move{};
     killer_moves = {};
 
     int best_root_value = -INF;
 
-    for (int depth = 1;; ++depth) {
+    for (int depth = 1; !check_limit() && depth <= max_depth; ++depth) {
       int alpha = -INF, beta = INF, delta = ASP_DELTA;
 
       if (depth == 1) {
@@ -310,7 +321,7 @@ public:
       while (true) {
         int current = negamax<true>(board, depth, 0, alpha, beta);
 
-        if (timed_out)
+        if (cancel_search)
           break;
 
         if (current <= alpha)
@@ -325,7 +336,7 @@ public:
         delta *= ASP_MULTIPLIER;
       }
 
-      if (timed_out)
+      if (cancel_search)
         break;
 
       std::optional<int> moves_to_mate;
@@ -335,17 +346,19 @@ public:
       else if (CHECKMATE - best_root_value <= MAX_PLY)
         moves_to_mate = (CHECKMATE - best_root_value + 1) / 2;
 
-      auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                         std::chrono::system_clock::now() - start)
-                         .count();
+      if (INFO) {
+        auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now() - start)
+                           .count();
 
-      std::println("info depth {} nodes {} nps {} score {} time {} pv {}",
-                   depth, nodes_searched,
-                   static_cast<int>(1000 * nodes_searched / (time_ms + 1)),
-                   moves_to_mate.has_value()
-                       ? std::string("mate ") + std::to_string(*moves_to_mate)
-                       : std::string("cp ") + std::to_string(best_root_value),
-                   time_ms, best_root_move.uci());
+        std::println("info depth {} nodes {} nps {} score {} time {} pv {}",
+                     depth, nodes_searched,
+                     static_cast<int>(1000 * nodes_searched / (time_ms + 1)),
+                     moves_to_mate.has_value()
+                         ? std::string("mate ") + std::to_string(*moves_to_mate)
+                         : std::string("cp ") + std::to_string(best_root_value),
+                     time_ms, best_root_move.uci());
+      }
     }
 
     Board copy = board;

@@ -5,6 +5,7 @@
 #include <future>
 #include <iostream>
 #include <numeric>
+#include <string>
 
 class UCIEngine {
   Board position =
@@ -13,9 +14,9 @@ class UCIEngine {
   std::future<void> searcher_future;
 
 private:
-  constexpr int stoi(std::string_view str) const {
-    int result;
-    std::from_chars(str.begin(), str.end(), result);
+  template <typename T> constexpr T parse_number(std::string_view str) const {
+    T result = 0;
+    std::from_chars<T>(str.begin(), str.end(), result);
     return result;
   }
 
@@ -38,10 +39,8 @@ public:
                                          std::string{}, accumulator);
 
       if (name == "Hash")
-        searcher.resize_ttable(
-            stoi(std::accumulate(std::next(value_it), tokens.end(),
-                                 std::string{}, accumulator)) *
-            (1 << 20) / sizeof(TTNode));
+        searcher.resize_ttable(parse_number<size_t>(*(value_it + 1)) *
+                               (1 << 20) / sizeof(TTNode));
 
     } else if (tokens[0] == "isready")
       std::puts("readyok");
@@ -82,33 +81,40 @@ public:
         }));
       }
     } else if (tokens[0] == "go") {
-      std::chrono::steady_clock::duration time{};
+      std::chrono::steady_clock::duration time = std::chrono::years(1);
+      long nodes = std::numeric_limits<long>::max(),
+           depth = std::numeric_limits<long>::max();
 
-      if (tokens.size() == 1 || tokens[1] == "infinite")
-        time = std::chrono::milliseconds{1'000'000'000};
-      else if (tokens[1] == "movetime")
-        time = std::chrono::milliseconds{stoi(tokens[2])};
-      else if (tokens[1] == "wtime") {
-        time = std::chrono::milliseconds{
-            stoi(tokens[position.stm == Sides::WHITE ? 2 : 4]) / 20};
-
-        if (tokens.size() > 5)
-          time += std::chrono::milliseconds{
-              stoi(tokens[position.stm == Sides::WHITE ? 6 : 8]) / 2};
+      for (auto [arg, value] :
+           tokens | std::views::drop(1) | std::views::adjacent<2>) {
+        if (arg == "movetime")
+          time = std::chrono::milliseconds{parse_number<long>(value)};
+        else if ((position.stm == Sides::WHITE && arg == "wtime") ||
+                 (position.stm == Sides::BLACK && arg == "btime"))
+          time = std::chrono::milliseconds(parse_number<long>(value) / 20);
+        else if ((position.stm == Sides::WHITE && arg == "winc") ||
+                 (position.stm == Sides::BLACK && arg == "binc"))
+          time += std::chrono::milliseconds(parse_number<long>(value) / 2);
+        else if (arg == "nodes")
+          nodes = parse_number<long>(value);
+        else if (arg == "depth")
+          depth = parse_number<long>(value);
       }
 
-      searcher_future = std::async(std::launch::async, [this, time]() {
-        std::println("bestmove {}", searcher.search(position, time).uci());
-        std::cout.flush();
-      });
+      searcher_future =
+          std::async(std::launch::async, [this, time, nodes, depth]() {
+            std::println("bestmove {}",
+                         searcher.search(position, time, nodes, depth).uci());
+            std::cout.flush();
+          });
     } else if (tokens[0] == "stop")
       searcher.stop();
     else if (tokens[0] == "ucinewgame")
       searcher.clear();
     else if (tokens[0] == "perft")
-      std::println("{}", perft(position, stoi(tokens[1])));
+      std::println("{}", perft(position, parse_number<int>(tokens[1])));
     else if (tokens[0] == "splitperft")
-      splitperft(position, stoi(tokens[1]));
+      splitperft(position, parse_number<int>(tokens[1]));
   }
 
   void play() {
