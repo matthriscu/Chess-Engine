@@ -4,7 +4,6 @@
 #include "searcher.hpp"
 #include <future>
 #include <iostream>
-#include <numeric>
 #include <string>
 
 class UCIEngine {
@@ -29,23 +28,25 @@ public:
                 "id author Matei Hriscu\n"
                 "uciok");
     else if (tokens[0] == "setoption") {
-      auto value_it = std::ranges::find(tokens, "value");
+      std::string name, value;
 
-      auto accumulator = [](const std::string &acc, std::string_view s) {
-        return acc + std::string(s);
-      };
+      bool name_done = false;
 
-      std::string name = std::accumulate(tokens.begin() + 2, value_it,
-                                         std::string{}, accumulator);
+      for (std::string_view token : std::views::drop(tokens, 2)) {
+        if (token == "value")
+          name_done = true;
+        else if (!name_done)
+          name += token;
+        else
+          value += token;
+      }
 
       if (name == "Hash")
-        searcher.resize_ttable(parse_number<size_t>(*(value_it + 1)) *
-                               (1 << 20) / sizeof(TTNode));
-
+        searcher.resize_ttable(parse_number<size_t>(value) * (1 << 20) /
+                               sizeof(TTNode));
     } else if (tokens[0] == "isready")
       std::puts("readyok");
     else if (tokens[0].starts_with("position")) {
-
       size_t moves_list_start;
 
       if (tokens[1] == "startpos") {
@@ -60,26 +61,10 @@ public:
       }
 
       for (std::string_view move_str :
-           std::views::drop(tokens, moves_list_start)) {
-        Square from(move_str.substr(0, 2)), to(move_str.substr(2, 2));
-
-        Move move;
-        uint16_t mask;
-
-        if (move_str.size() == 5) {
-          move = Move(from, to, false, Piece(move_str[4]));
-          mask = 0b0011111111111111;
-        } else {
-          move = Move(from, to, false);
-          mask = 0b0000111111111111;
-        }
-
-        MoveList moves = position.pseudolegal_moves();
-
-        position.make_move(*std::ranges::find_if(moves, [&](Move m) {
-          return (m.raw() & mask) == (move.raw() & mask);
-        }));
-      }
+           std::views::drop(tokens, moves_list_start))
+        position.make_move(position.pseudolegal_moves().get_matching_move(
+            move_str.substr(0, 2), move_str.substr(2, 2),
+            move_str.size() == 5 ? Piece(move_str.back()) : Piece()));
     } else if (tokens[0] == "go") {
       std::chrono::steady_clock::duration time = std::chrono::years(1);
       int64_t nodes = std::numeric_limits<int64_t>::max(),
@@ -115,6 +100,8 @@ public:
       std::println("{}", perft(position, parse_number<int>(tokens[1])));
     else if (tokens[0] == "splitperft")
       splitperft(position, parse_number<int>(tokens[1]));
+    else if (tokens[0] == "print")
+      std::println("{}", position);
   }
 
   void play() {
