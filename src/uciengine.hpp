@@ -82,23 +82,23 @@ public:
       }
     } else if (tokens[0] == "go") {
       std::chrono::steady_clock::duration time = std::chrono::years(1);
-      long nodes = std::numeric_limits<long>::max(),
-           depth = std::numeric_limits<long>::max();
+      int64_t nodes = std::numeric_limits<int64_t>::max(),
+              depth = std::numeric_limits<int64_t>::max();
 
       for (auto [arg, value] :
            tokens | std::views::drop(1) | std::views::adjacent<2>) {
         if (arg == "movetime")
-          time = std::chrono::milliseconds{parse_number<long>(value)};
+          time = std::chrono::milliseconds{parse_number<int64_t>(value)};
         else if ((position.stm == Sides::WHITE && arg == "wtime") ||
                  (position.stm == Sides::BLACK && arg == "btime"))
-          time = std::chrono::milliseconds(parse_number<long>(value) / 20);
+          time = std::chrono::milliseconds(parse_number<int64_t>(value) / 20);
         else if ((position.stm == Sides::WHITE && arg == "winc") ||
                  (position.stm == Sides::BLACK && arg == "binc"))
-          time += std::chrono::milliseconds(parse_number<long>(value) / 2);
+          time += std::chrono::milliseconds(parse_number<int64_t>(value) / 2);
         else if (arg == "nodes")
-          nodes = parse_number<long>(value);
+          nodes = parse_number<int64_t>(value);
         else if (arg == "depth")
-          depth = parse_number<long>(value);
+          depth = parse_number<int64_t>(value);
       }
 
       searcher_future =

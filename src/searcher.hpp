@@ -13,12 +13,12 @@ class Searcher {
   std::vector<uint64_t> hashes{};
   Squares::Array<Squares::Array<int>> history{};
 
-  long nodes_searched;
+  int64_t nodes_searched;
   bool cancel_search;
   bool is_hard_limit;
 
   std::chrono::system_clock::time_point start, deadline;
-  long node_limit;
+  int64_t node_limit;
 
   Move best_root_move;
 
@@ -292,7 +292,7 @@ public:
 
   template <bool INFO = true>
   Move search(const Board &board, std::chrono::system_clock::duration duration,
-              long max_nodes, long max_depth, bool hard_limit = true) {
+              int64_t max_nodes, int64_t max_depth, bool hard_limit = true) {
     start = std::chrono::system_clock::now();
     deadline = start + duration;
     node_limit = max_nodes;
