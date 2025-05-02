@@ -1,5 +1,6 @@
 #pragma once
 
+#include "datagen.hpp"
 #include "perft.hpp"
 #include "searcher.hpp"
 #include <future>
@@ -60,11 +61,17 @@ public:
         moves_list_start = 9;
       }
 
+      searcher.clear_hashes();
+      searcher.add_hash(position.zobrist);
+
       for (std::string_view move_str :
-           std::views::drop(tokens, moves_list_start))
+           std::views::drop(tokens, moves_list_start)) {
         position.make_move(position.pseudolegal_moves().get_matching_move(
             move_str.substr(0, 2), move_str.substr(2, 2),
             move_str.size() == 5 ? Piece(move_str.back()) : Piece()));
+
+        searcher.add_hash(position.zobrist);
+      }
     } else if (tokens[0] == "go") {
       std::chrono::steady_clock::duration time = std::chrono::years(1);
       int64_t nodes = std::numeric_limits<int64_t>::max(),
@@ -86,12 +93,12 @@ public:
           depth = parse_number<int64_t>(value);
       }
 
-      searcher_future =
-          std::async(std::launch::async, [this, time, nodes, depth]() {
-            std::println("bestmove {}",
-                         searcher.search(position, time, nodes, depth).uci());
-            std::cout.flush();
-          });
+      searcher_future = std::async(std::launch::async, [this, time, nodes,
+                                                        depth]() {
+        std::println("bestmove {}",
+                     searcher.search(position, time, nodes, depth).first.uci());
+        std::cout.flush();
+      });
     } else if (tokens[0] == "stop")
       searcher.stop();
     else if (tokens[0] == "ucinewgame")
@@ -102,6 +109,8 @@ public:
       splitperft(position, parse_number<int>(tokens[1]));
     else if (tokens[0] == "print")
       std::println("{}", position);
+    else if (tokens[0] == "datagen")
+      datagen(parse_number<int>(tokens[1]), parse_number<int>(tokens[2]));
   }
 
   void play() {

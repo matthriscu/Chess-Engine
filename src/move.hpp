@@ -94,3 +94,33 @@ struct ScoredMove : public Move {
     return score <=> other.score;
   };
 };
+
+struct ViriMove {
+  uint16_t data;
+
+  constexpr ViriMove(Move move) {
+    data = move.from().raw();
+
+    if (move.is_en_passant())
+      data |= 0x4000;
+    else if (move.is_castle())
+      data |= 0x8000;
+    else if (move.is_promotion())
+      data |= 0xC000 | ((move.promoted_to().raw() - 1) << 12);
+
+    Square to = move.to();
+
+    if (move.is_castle()) {
+      if (move.to() == Squares::C1)
+        to = Squares::A1;
+      else if (move.to() == Squares::C8)
+        to = Squares::A8;
+      else if (move.to() == Squares::G1)
+        to = Squares::H1;
+      else if (move.to() == Squares::G8)
+        to = Squares::H8;
+    }
+
+    data |= to.raw() << 6;
+  }
+};

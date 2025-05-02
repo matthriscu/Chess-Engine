@@ -25,10 +25,11 @@ class Searcher {
   std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
 
   bool check_limit() {
+    if (nodes_searched >= node_limit)
+      return cancel_search = true;
+
     if (nodes_searched % TIME_CHECK_FREQUENCY == 0)
-      cancel_search = best_root_move != Move{} &&
-                      (std::chrono::system_clock::now() >= deadline ||
-                       nodes_searched > node_limit);
+      cancel_search = std::chrono::system_clock::now() >= deadline;
 
     return cancel_search;
   }
@@ -290,9 +291,16 @@ public:
     ttable = {};
   }
 
+  constexpr std::vector<uint64_t> get_hashes() const { return hashes; }
+
+  constexpr void clear_hashes() { hashes.clear(); }
+
+  constexpr void add_hash(uint64_t hash) { hashes.push_back(hash); }
+
   template <bool INFO = true>
-  Move search(const Board &board, std::chrono::system_clock::duration duration,
-              int64_t max_nodes, int64_t max_depth, bool hard_limit = true) {
+  std::pair<Move, int16_t>
+  search(const Board &board, std::chrono::system_clock::duration duration,
+         int64_t max_nodes, int64_t max_depth, bool hard_limit = true) {
     start = std::chrono::system_clock::now();
     deadline = start + duration;
     node_limit = max_nodes;
@@ -321,7 +329,7 @@ public:
       while (true) {
         int current = negamax<true>(board, depth, 0, alpha, beta);
 
-        if (cancel_search)
+        if (best_root_move == Move() || cancel_search)
           break;
 
         if (current <= alpha)
@@ -336,7 +344,7 @@ public:
         delta *= ASP_MULTIPLIER;
       }
 
-      if (cancel_search)
+      if (best_root_move == Move() || cancel_search)
         break;
 
       std::optional<int> moves_to_mate;
@@ -361,12 +369,6 @@ public:
       }
     }
 
-    Board copy = board;
-    copy.make_move(best_root_move);
-
-    hashes.push_back(board.zobrist);
-    hashes.push_back(copy.zobrist);
-
-    return best_root_move;
+    return {best_root_move, best_root_value};
   }
 };
