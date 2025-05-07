@@ -25,7 +25,7 @@ class Searcher {
   std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
 
   bool check_limit() {
-    if (nodes_searched >= node_limit)
+    if (cancel_search || nodes_searched >= node_limit)
       return cancel_search = true;
 
     if (nodes_searched % TIME_CHECK_FREQUENCY == 0)
@@ -213,7 +213,7 @@ class Searcher {
       Board copy = board;
       copy.make_move(move);
 
-      int value;
+      int value = -INF;
 
       if (copy.is_legal()) {
         if (skip_quiets && move.is_quiet())
@@ -329,7 +329,7 @@ public:
       while (true) {
         int current = negamax<true>(board, depth, 0, alpha, beta);
 
-        if (best_root_move == Move() || cancel_search)
+        if (best_root_move == Move())
           break;
 
         if (current <= alpha)
@@ -344,7 +344,7 @@ public:
         delta *= ASP_MULTIPLIER;
       }
 
-      if (best_root_move == Move() || cancel_search)
+      if (best_root_move == Move())
         break;
 
       std::optional<int> moves_to_mate;

@@ -20,7 +20,7 @@ Game play_datagen_game() {
 
     if (legal_moves == 0) {
       board = Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-      i = 0;
+      i = -1;
     } else
       board.make_move(moves[rand() % legal_moves]);
   }
