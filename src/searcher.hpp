@@ -326,7 +326,7 @@ public:
       while (true) {
         int current = negamax<true>(board, depth, 0, alpha, beta);
 
-        if (best_root_move == Move())
+        if (cancel_search)
           break;
 
         if (current <= alpha)
@@ -341,7 +341,7 @@ public:
         delta *= ASP_MULTIPLIER;
       }
 
-      if (best_root_move == Move())
+      if (cancel_search)
         break;
 
       std::optional<int> moves_to_mate;
