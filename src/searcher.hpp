@@ -13,19 +13,17 @@ class Searcher {
   std::vector<uint64_t> hashes{};
   Squares::Array<Squares::Array<int>> history{};
 
-  int64_t nodes_searched;
+  int64_t nodes_searched, hard_node_limit;
   bool cancel_search;
-  bool is_hard_limit;
 
   std::chrono::system_clock::time_point start, deadline;
-  int64_t node_limit;
 
   Move best_root_move;
 
   std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
 
-  bool check_limit() {
-    if (cancel_search || nodes_searched >= node_limit)
+  bool check_hard_limit() {
+    if (cancel_search || nodes_searched >= hard_node_limit)
       return cancel_search = true;
 
     if (nodes_searched % TIME_CHECK_FREQUENCY == 0)
@@ -90,7 +88,7 @@ class Searcher {
   }
 
   int qsearch(const Board &board, int ply, int alpha, int beta) {
-    if (is_hard_limit && check_limit())
+    if (check_hard_limit())
       return 0;
 
     ++nodes_searched;
@@ -157,7 +155,7 @@ class Searcher {
   template <bool PV>
   int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
-    if (is_hard_limit && check_limit())
+    if (check_hard_limit())
       return 0;
 
     if (depth == 0)
@@ -300,12 +298,10 @@ public:
   template <bool INFO = true>
   std::pair<Move, int16_t>
   search(const Board &board, std::chrono::system_clock::duration duration,
-         int64_t max_nodes, int64_t max_depth, bool hard_limit = true) {
+         int64_t soft_node_limit, int hard_node_limit, int64_t max_depth) {
     start = std::chrono::system_clock::now();
     deadline = start + duration;
-    node_limit = max_nodes;
-
-    is_hard_limit = hard_limit;
+    this->hard_node_limit = hard_node_limit;
 
     nodes_searched = 0;
     cancel_search = false;
@@ -315,7 +311,8 @@ public:
 
     int best_root_value = -INF;
 
-    for (int depth = 1; !check_limit() && depth <= max_depth; ++depth) {
+    for (int depth = 1; nodes_searched <= soft_node_limit && depth <= max_depth;
+         ++depth) {
       int alpha = -INF, beta = INF, delta = ASP_DELTA;
 
       if (depth == 1) {

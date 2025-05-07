@@ -32,7 +32,7 @@ Game play_datagen_game() {
 
   while (true) {
     auto [move, value] = searcher.search<false>(board, std::chrono::years(1),
-                                                5000, 100000, false);
+                                                5000, 8000000, 100000);
 
     if (move == Move())
       break;

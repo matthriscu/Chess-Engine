@@ -95,8 +95,9 @@ public:
 
       searcher_future = std::async(std::launch::async, [this, time, nodes,
                                                         depth]() {
-        std::println("bestmove {}",
-                     searcher.search(position, time, nodes, depth).first.uci());
+        std::println(
+            "bestmove {}",
+            searcher.search(position, time, nodes, nodes, depth).first.uci());
         std::cout.flush();
       });
     } else if (tokens[0] == "stop")
