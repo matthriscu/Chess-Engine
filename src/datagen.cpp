@@ -1,12 +1,17 @@
 #include "datagen.hpp"
 #include "uciengine.hpp"
 #include <fstream>
+#include <random>
 #include <thread>
 
 Game play_datagen_game() {
   Board board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
-  int initial_moves = 8 + rand() % 2;
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dist01(0, 1);
+
+  int initial_moves = 8 + dist01(gen);
 
   for (int i = 0; i < initial_moves; ++i) {
     MoveList moves = board.pseudolegal_moves();
@@ -18,11 +23,12 @@ Game play_datagen_game() {
                                      }) -
                       moves.begin();
 
-    if (legal_moves == 0) {
-      board = Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-      i = -1;
-    } else
-      board.make_move(moves[rand() % legal_moves]);
+    if (legal_moves == 0)
+      return play_datagen_game();
+    else {
+      std::uniform_int_distribution<> dist(0, legal_moves - 1);
+      board.make_move(moves[dist(gen)]);
+    }
   }
 
   Searcher searcher;
@@ -31,8 +37,9 @@ Game play_datagen_game() {
   searcher.add_hash(board.zobrist);
 
   while (true) {
-    auto [move, value] = searcher.search<false>(board, std::chrono::years(1),
-                                                5000, 8000000, 100000);
+    auto [move, value] =
+        searcher.search<false>(board, std::nullopt, DATAGEN_SOFT_NODE_LIMIT,
+                               DATAGEN_HARD_NODE_LIMIT, std::nullopt);
 
     if (move == Move())
       break;
@@ -60,7 +67,6 @@ Game play_datagen_game() {
 
 void print_game(const Game &game, std::ofstream &out_file) {
   static constexpr int zero = 0;
-
   static std::mutex mtx;
 
   std::lock_guard lock(mtx);
@@ -84,6 +90,7 @@ void datagen(int num_threads, int games) {
   std::vector<std::jthread> threads;
 
   for (int i = 0; i < num_threads; ++i)
-    threads.emplace_back(datagen_thread, games / num_threads,
+    threads.emplace_back(datagen_thread,
+                         games / num_threads + (i < games % num_threads),
                          std::ref(out_file));
 }

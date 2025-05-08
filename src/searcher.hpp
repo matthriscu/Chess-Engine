@@ -23,13 +23,10 @@ class Searcher {
   std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
 
   bool check_hard_limit() {
-    if (cancel_search || nodes_searched >= hard_node_limit)
-      return cancel_search = true;
-
-    if (nodes_searched % TIME_CHECK_FREQUENCY == 0)
-      cancel_search = std::chrono::system_clock::now() >= deadline;
-
-    return cancel_search;
+    return cancel_search =
+               (cancel_search || nodes_searched >= hard_node_limit ||
+                (nodes_searched % TIME_CHECK_FREQUENCY == 0 &&
+                 std::chrono::system_clock::now() >= deadline));
   }
 
   template <bool QSearch = false>
@@ -297,11 +294,20 @@ public:
 
   template <bool INFO = true>
   std::pair<Move, int16_t>
-  search(const Board &board, std::chrono::system_clock::duration duration,
-         int64_t soft_node_limit, int hard_node_limit, int64_t max_depth) {
+  search(const Board &board,
+         std::optional<std::chrono::system_clock::duration> duration_opt,
+         std::optional<int64_t> soft_node_limit_opt,
+         std::optional<int64_t> hard_node_limit_opt,
+         std::optional<int64_t> max_depth_opt) {
     start = std::chrono::system_clock::now();
-    deadline = start + duration;
-    this->hard_node_limit = hard_node_limit;
+    deadline = start + duration_opt.value_or(std::chrono::years(1));
+    hard_node_limit =
+        hard_node_limit_opt.value_or(std::numeric_limits<int64_t>::max());
+
+    int64_t soft_node_limit = soft_node_limit_opt.value_or(
+                std::numeric_limits<int64_t>::max()),
+            max_depth =
+                max_depth_opt.value_or(std::numeric_limits<int64_t>::max());
 
     nodes_searched = 0;
     cancel_search = false;
