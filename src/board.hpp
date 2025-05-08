@@ -370,19 +370,17 @@ template <> struct std::formatter<Board> {
   auto format(const Board &board, std::format_context &ctx) const {
     auto out = ctx.out();
 
-    out = std::format_to(out, "\t\tA B C D E F G H\n");
+    out = std::format_to(out, "\t\tA B C D E F G H\n\n");
 
     for (int rank = 7; rank >= 0; --rank) {
       out = std::format_to(out, "\t{}\t", rank + 1);
       for (int file = 0; file < 8; ++file) {
-        Side side;
-        if (board.side_occupancy[Sides::WHITE] & Bitboard(rank, file))
-          out = std::format_to(
-              out, "{} ",
-              board.square_to_piece[Square(rank, file)].repr(
-                  board.side_occupancy[Sides::WHITE] & Bitboard(rank, file)
-                      ? Sides::WHITE
-                      : Sides::BLACK));
+        out = std::format_to(
+            out, "{} ",
+            board.square_to_piece[Square(rank, file)].repr(
+                board.side_occupancy[Sides::WHITE] & Bitboard(rank, file)
+                    ? Sides::WHITE
+                    : Sides::BLACK));
       }
 
       out = std::format_to(out, "\t{}\n", rank + 1);

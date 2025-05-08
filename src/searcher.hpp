@@ -13,24 +13,20 @@ class Searcher {
   std::vector<uint64_t> hashes{};
   Squares::Array<Squares::Array<int>> history{};
 
-  int64_t nodes_searched;
+  int64_t nodes_searched, hard_node_limit;
   bool cancel_search;
-  bool is_hard_limit;
 
   std::chrono::system_clock::time_point start, deadline;
-  int64_t node_limit;
 
   Move best_root_move;
 
   std::array<std::array<Move, 2>, MAX_PLY> killer_moves;
 
-  bool check_limit() {
-    if (nodes_searched % TIME_CHECK_FREQUENCY == 0)
-      cancel_search = best_root_move != Move{} &&
-                      (std::chrono::system_clock::now() >= deadline ||
-                       nodes_searched > node_limit);
-
-    return cancel_search;
+  bool check_hard_limit() {
+    return cancel_search =
+               (cancel_search || nodes_searched >= hard_node_limit ||
+                (nodes_searched % TIME_CHECK_FREQUENCY == 0 &&
+                 std::chrono::system_clock::now() >= deadline));
   }
 
   template <bool QSearch = false>
@@ -89,7 +85,7 @@ class Searcher {
   }
 
   int qsearch(const Board &board, int ply, int alpha, int beta) {
-    if (is_hard_limit && check_limit())
+    if (check_hard_limit())
       return 0;
 
     ++nodes_searched;
@@ -156,7 +152,7 @@ class Searcher {
   template <bool PV>
   int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
-    if (is_hard_limit && check_limit())
+    if (check_hard_limit())
       return 0;
 
     if (depth == 0)
@@ -212,7 +208,7 @@ class Searcher {
       Board copy = board;
       copy.make_move(move);
 
-      int value;
+      int value = -INF;
 
       if (copy.is_legal()) {
         if (skip_quiets && move.is_quiet())
@@ -290,14 +286,28 @@ public:
     ttable = {};
   }
 
-  template <bool INFO = true>
-  Move search(const Board &board, std::chrono::system_clock::duration duration,
-              int64_t max_nodes, int64_t max_depth, bool hard_limit = true) {
-    start = std::chrono::system_clock::now();
-    deadline = start + duration;
-    node_limit = max_nodes;
+  constexpr std::vector<uint64_t> get_hashes() const { return hashes; }
 
-    is_hard_limit = hard_limit;
+  constexpr void clear_hashes() { hashes.clear(); }
+
+  constexpr void add_hash(uint64_t hash) { hashes.push_back(hash); }
+
+  template <bool INFO = true>
+  std::pair<Move, int16_t>
+  search(const Board &board,
+         std::optional<std::chrono::system_clock::duration> duration_opt,
+         std::optional<int64_t> soft_node_limit_opt,
+         std::optional<int64_t> hard_node_limit_opt,
+         std::optional<int64_t> max_depth_opt) {
+    start = std::chrono::system_clock::now();
+    deadline = start + duration_opt.value_or(std::chrono::years(1));
+    hard_node_limit =
+        hard_node_limit_opt.value_or(std::numeric_limits<int64_t>::max());
+
+    int64_t soft_node_limit = soft_node_limit_opt.value_or(
+                std::numeric_limits<int64_t>::max()),
+            max_depth =
+                max_depth_opt.value_or(std::numeric_limits<int64_t>::max());
 
     nodes_searched = 0;
     cancel_search = false;
@@ -307,7 +317,8 @@ public:
 
     int best_root_value = -INF;
 
-    for (int depth = 1; !check_limit() && depth <= max_depth; ++depth) {
+    for (int depth = 1; nodes_searched <= soft_node_limit && depth <= max_depth;
+         ++depth) {
       int alpha = -INF, beta = INF, delta = ASP_DELTA;
 
       if (depth == 1) {
@@ -361,12 +372,6 @@ public:
       }
     }
 
-    Board copy = board;
-    copy.make_move(best_root_move);
-
-    hashes.push_back(board.zobrist);
-    hashes.push_back(copy.zobrist);
-
-    return best_root_move;
+    return {best_root_move, best_root_value};
   }
 };

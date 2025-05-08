@@ -148,7 +148,7 @@ template <> struct std::formatter<Bitboard> {
   auto format(Bitboard bb, std::format_context &ctx) const {
     auto out = ctx.out();
 
-    out = std::format_to(out, "\t\tA B C D E F G H\n");
+    out = std::format_to(out, "\t\tA B C D E F G H\n\n");
 
     for (int rank = 7; rank >= 0; --rank) {
       out = std::format_to(out, "\t{}\t", rank + 1);

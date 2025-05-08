@@ -6,18 +6,17 @@
 #include <iostream>
 #include <string>
 
+template <typename T> constexpr T parse_number(std::string_view str) {
+  T result = 0;
+  std::from_chars<T>(str.begin(), str.end(), result);
+  return result;
+}
+
 class UCIEngine {
   Board position =
       Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   Searcher searcher;
   std::future<void> searcher_future;
-
-private:
-  template <typename T> constexpr T parse_number(std::string_view str) const {
-    T result = 0;
-    std::from_chars<T>(str.begin(), str.end(), result);
-    return result;
-  }
 
 public:
   void process_command(std::string_view command) {
@@ -60,38 +59,46 @@ public:
         moves_list_start = 9;
       }
 
+      searcher.clear_hashes();
+      searcher.add_hash(position.zobrist);
+
       for (std::string_view move_str :
-           std::views::drop(tokens, moves_list_start))
+           std::views::drop(tokens, moves_list_start)) {
         position.make_move(position.pseudolegal_moves().get_matching_move(
             move_str.substr(0, 2), move_str.substr(2, 2),
             move_str.size() == 5 ? Piece(move_str.back()) : Piece()));
+
+        searcher.add_hash(position.zobrist);
+      }
     } else if (tokens[0] == "go") {
-      std::chrono::steady_clock::duration time = std::chrono::years(1);
-      int64_t nodes = std::numeric_limits<int64_t>::max(),
-              depth = std::numeric_limits<int64_t>::max();
+      std::optional<std::chrono::steady_clock::duration> duration;
+      std::optional<int64_t> nodes, depth;
 
       for (auto [arg, value] :
            tokens | std::views::drop(1) | std::views::adjacent<2>) {
         if (arg == "movetime")
-          time = std::chrono::milliseconds{parse_number<int64_t>(value)};
+          duration = std::chrono::milliseconds{parse_number<int64_t>(value)};
         else if ((position.stm == Sides::WHITE && arg == "wtime") ||
                  (position.stm == Sides::BLACK && arg == "btime"))
-          time = std::chrono::milliseconds(parse_number<int64_t>(value) / 20);
+          duration =
+              std::chrono::milliseconds(parse_number<int64_t>(value) / 20);
         else if ((position.stm == Sides::WHITE && arg == "winc") ||
                  (position.stm == Sides::BLACK && arg == "binc"))
-          time += std::chrono::milliseconds(parse_number<int64_t>(value) / 2);
+          *duration +=
+              std::chrono::milliseconds(parse_number<int64_t>(value) / 2);
         else if (arg == "nodes")
           nodes = parse_number<int64_t>(value);
         else if (arg == "depth")
           depth = parse_number<int64_t>(value);
       }
 
-      searcher_future =
-          std::async(std::launch::async, [this, time, nodes, depth]() {
-            std::println("bestmove {}",
-                         searcher.search(position, time, nodes, depth).uci());
-            std::cout.flush();
-          });
+      searcher_future = std::async(std::launch::async, [this, duration, nodes,
+                                                        depth]() {
+        std::println("bestmove {}",
+                     searcher.search(position, duration, nodes, nodes, depth)
+                         .first.uci());
+        std::cout.flush();
+      });
     } else if (tokens[0] == "stop")
       searcher.stop();
     else if (tokens[0] == "ucinewgame")
