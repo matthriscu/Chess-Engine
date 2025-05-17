@@ -3,8 +3,12 @@
 #include "attacks.hpp"
 #include "hashing.hpp"
 #include "movelist.hpp"
+#include "nnue.hpp"
 #include "util.hpp"
+#include <algorithm>
 #include <cassert>
+#include <functional>
+#include <ranges>
 
 struct Board {
   Sides::Array<Pieces::Array<Bitboard>> pieces;
@@ -16,15 +20,13 @@ struct Board {
   Side stm;
   Sides::Array<std::array<bool, 2>> castling_rights;
   uint64_t zobrist;
+  Sides::Array<Accumulator> acc;
 
   constexpr Board() = default;
 
-  constexpr Board(std::string_view fen_string) {
+  constexpr Board(std::string_view fen_string)
+      : pieces{}, side_occupancy{}, square_to_piece{}, zobrist{0} {
     std::vector<std::string_view> tokens = string_tokenizer(fen_string);
-
-    pieces = {};
-    side_occupancy = {};
-    square_to_piece = {};
 
     int rank = 7, file = 0;
 
@@ -58,6 +60,52 @@ struct Board {
     ep_square = Square(tokens[3]);
     std::from_chars(tokens[4].begin(), tokens[4].end(), halfmove_clock);
     zobrist = hash();
+  }
+
+  template <bool ADD = true>
+  void update_accumulators(const PerspectiveNetwork &net, Square square,
+                           Piece piece, Side side) {
+    auto op = ADD ? std::mem_fn(&Accumulator::operator+=)
+                  : std::mem_fn(&Accumulator::operator-=);
+
+    if (side == Sides::WHITE) {
+      op(acc[Sides::WHITE], net.get_hl_line(64 * piece.raw() + square.raw()));
+      op(acc[Sides::BLACK], net.get_hl_line(64 * (piece.raw() + Pieces::NUM) +
+                                            (square.raw() ^ 56)));
+
+      // std::println("White {}", 64 * piece.raw() + square.raw());
+      // std::println("Black {}",
+      //              64 * (piece.raw() + Pieces::NUM) + (square.raw() ^ 56));
+    } else {
+      op(acc[Sides::WHITE],
+         net.get_hl_line(64 * (piece.raw() + Pieces::NUM) + square.raw()));
+      op(acc[Sides::BLACK],
+         net.get_hl_line(64 * piece.raw() + (square.raw() ^ 56)));
+
+      // std::println("White {}", 64 * (piece.raw() + Pieces::NUM) +
+      // square.raw()); std::println("Black {}", 64 * piece.raw() +
+      // (square.raw() ^ 56));
+    }
+  }
+
+  constexpr Board(std::string_view fen_string, const PerspectiveNetwork &net)
+      : Board(fen_string) {
+    acc[Sides::WHITE] = acc[Sides::BLACK] = net.get_hl_biases();
+
+    std::ranges::for_each(square_to_piece | std::views::enumerate |
+                              std::views::filter([](auto p) {
+                                return get<1>(p) != Pieces::NONE;
+                              }),
+                          [&](auto p) {
+                            Square square(get<0>(p));
+                            Piece piece = get<1>(p);
+
+                            update_accumulators(net, square, piece,
+                                                pieces[Sides::WHITE][piece] &
+                                                        Bitboard(square)
+                                                    ? Sides::WHITE
+                                                    : Sides::BLACK);
+                          });
   }
 
   constexpr void make_move(Move m) {

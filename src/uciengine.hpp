@@ -1,5 +1,6 @@
 #pragma once
 
+#include "nnue.hpp"
 #include "perft.hpp"
 #include "searcher.hpp"
 #include <future>
@@ -17,6 +18,7 @@ class UCIEngine {
       Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   Searcher searcher;
   std::future<void> searcher_future;
+  PerspectiveNetwork net = PerspectiveNetwork("beans.bin");
 
 public:
   void process_command(std::string_view command) {
@@ -47,17 +49,18 @@ public:
       std::puts("readyok");
     else if (tokens[0].starts_with("position")) {
       size_t moves_list_start;
+      std::string fen;
 
       if (tokens[1] == "startpos") {
-        position =
-            Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         moves_list_start = 3;
       } else {
-        position =
-            Board(tokens | std::views::drop(2) | std::views::take(6) |
-                  std::views::join_with(' ') | std::ranges::to<std::string>());
+        fen = tokens | std::views::drop(2) | std::views::take(6) |
+              std::views::join_with(' ') | std::ranges::to<std::string>();
         moves_list_start = 9;
       }
+
+      position = Board(fen, net);
 
       searcher.clear_hashes();
       searcher.add_hash(position.zobrist);
