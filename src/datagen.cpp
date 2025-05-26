@@ -1,11 +1,13 @@
 #include "datagen.hpp"
+#include "nnue.hpp"
 #include "uciengine.hpp"
 #include <fstream>
 #include <random>
 #include <thread>
 
-Game play_datagen_game() {
-  Board board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+Game play_datagen_game(const PerspectiveNetwork &net) {
+  NetBoard board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                 net);
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -17,14 +19,14 @@ Game play_datagen_game() {
     MoveList moves = board.pseudolegal_moves();
     int legal_moves = std::partition(moves.begin(), moves.end(),
                                      [&](const Move &move) {
-                                       Board copy = board;
+                                       NetBoard copy = board;
                                        copy.make_move(move);
                                        return copy.is_legal();
                                      }) -
                       moves.begin();
 
     if (legal_moves == 0)
-      return play_datagen_game();
+      return play_datagen_game(net);
     else {
       std::uniform_int_distribution<> dist(0, legal_moves - 1);
       board.make_move(moves[dist(gen)]);
@@ -80,17 +82,18 @@ void print_game(const Game &game, std::ofstream &out_file) {
   out_file.write(reinterpret_cast<const char *>(&zero), sizeof(zero));
 }
 
-void datagen_thread(int games, std::ofstream &out_file) {
+void datagen_thread(const PerspectiveNetwork &net, int games,
+                    std::ofstream &out_file) {
   for (int i = 0; i < games; ++i)
-    print_game(play_datagen_game(), out_file);
+    print_game(play_datagen_game(net), out_file);
 }
 
-void datagen(int num_threads, int games) {
+void datagen(int num_threads, int games, const PerspectiveNetwork &net) {
   std::ofstream out_file("datagen.viri", std::ios::binary);
   std::vector<std::jthread> threads;
 
   for (int i = 0; i < num_threads; ++i)
-    threads.emplace_back(datagen_thread,
+    threads.emplace_back(datagen_thread, net,
                          games / num_threads + (i < games % num_threads),
                          std::ref(out_file));
 }

@@ -14,11 +14,11 @@ template <typename T> constexpr T parse_number(std::string_view str) {
 }
 
 class UCIEngine {
-  Board position =
-      Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   Searcher searcher;
   std::future<void> searcher_future;
-  PerspectiveNetwork net = PerspectiveNetwork("beans.bin");
+  PerspectiveNetwork net = PerspectiveNetwork(NET_PATH);
+  NetBoard position =
+      NetBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", net);
 
 public:
   void process_command(std::string_view command) {
@@ -60,7 +60,7 @@ public:
         moves_list_start = 9;
       }
 
-      position = Board(fen, net);
+      new (&position) NetBoard(fen, net);
 
       searcher.clear_hashes();
       searcher.add_hash(position.zobrist);
@@ -111,7 +111,7 @@ public:
     else if (tokens[0] == "splitperft")
       splitperft(position, parse_number<int>(tokens[1]));
     else if (tokens[0] == "print")
-      std::println("{}", position);
+      std::println("{}", static_cast<Board>(position));
   }
 
   void play() {

@@ -20,7 +20,6 @@ struct Board {
   Side stm;
   Sides::Array<std::array<bool, 2>> castling_rights;
   uint64_t zobrist;
-  Sides::Array<Accumulator> acc;
 
   constexpr Board() = default;
 
@@ -62,73 +61,27 @@ struct Board {
     zobrist = hash();
   }
 
-  template <bool ADD = true>
-  void update_accumulators(const PerspectiveNetwork &net, Square square,
-                           Piece piece, Side side) {
-    auto op = ADD ? std::mem_fn(&Accumulator::operator+=)
-                  : std::mem_fn(&Accumulator::operator-=);
-
-    if (side == Sides::WHITE) {
-      op(acc[Sides::WHITE], net.get_hl_line(64 * piece.raw() + square.raw()));
-      op(acc[Sides::BLACK], net.get_hl_line(64 * (piece.raw() + Pieces::NUM) +
-                                            (square.raw() ^ 56)));
-
-      // std::println("White {}", 64 * piece.raw() + square.raw());
-      // std::println("Black {}",
-      //              64 * (piece.raw() + Pieces::NUM) + (square.raw() ^ 56));
-    } else {
-      op(acc[Sides::WHITE],
-         net.get_hl_line(64 * (piece.raw() + Pieces::NUM) + square.raw()));
-      op(acc[Sides::BLACK],
-         net.get_hl_line(64 * piece.raw() + (square.raw() ^ 56)));
-
-      // std::println("White {}", 64 * (piece.raw() + Pieces::NUM) +
-      // square.raw()); std::println("Black {}", 64 * piece.raw() +
-      // (square.raw() ^ 56));
-    }
+  constexpr virtual void add_piece(Side side, Piece piece, Square square) {
+    pieces[side][piece] |= Bitboard(square);
+    square_to_piece[square] = piece;
+    zobrist ^= square_rands[square][piece][side];
   }
 
-  constexpr Board(std::string_view fen_string, const PerspectiveNetwork &net)
-      : Board(fen_string) {
-    acc[Sides::WHITE] = acc[Sides::BLACK] = net.get_hl_biases();
+  constexpr virtual void remove_piece(Side side, Piece piece, Square square) {
+    pieces[side][piece] &= ~Bitboard(square);
+    square_to_piece[square] = Pieces::NONE;
+    zobrist ^= square_rands[square][piece][side];
+  }
 
-    std::ranges::for_each(square_to_piece | std::views::enumerate |
-                              std::views::filter([](auto p) {
-                                return get<1>(p) != Pieces::NONE;
-                              }),
-                          [&](auto p) {
-                            Square square(get<0>(p));
-                            Piece piece = get<1>(p);
-
-                            update_accumulators(net, square, piece,
-                                                pieces[Sides::WHITE][piece] &
-                                                        Bitboard(square)
-                                                    ? Sides::WHITE
-                                                    : Sides::BLACK);
-                          });
+  constexpr virtual void move_piece(Side side, Piece piece, Square from,
+                                    Square to) {
+    pieces[side][piece] ^= Bitboard(from) | Bitboard(to);
+    square_to_piece[from] = Pieces::NONE;
+    square_to_piece[to] = piece;
+    zobrist ^= square_rands[from][piece][side] ^ square_rands[to][piece][side];
   }
 
   constexpr void make_move(Move m) {
-    auto add_piece = [&](Side side, Piece piece, Square square) {
-      pieces[side][piece] |= Bitboard(square);
-      square_to_piece[square] = piece;
-      zobrist ^= square_rands[square][piece][side];
-    };
-
-    auto remove_piece = [&](Side side, Piece piece, Square square) {
-      pieces[side][piece] &= ~Bitboard(square);
-      square_to_piece[square] = Pieces::NONE;
-      zobrist ^= square_rands[square][piece][side];
-    };
-
-    auto move_piece = [&](Side side, Piece piece, Square from, Square to) {
-      pieces[side][piece] ^= Bitboard(from) | Bitboard(to);
-      square_to_piece[from] = Pieces::NONE;
-      square_to_piece[to] = piece;
-      zobrist ^=
-          square_rands[from][piece][side] ^ square_rands[to][piece][side];
-    };
-
     Piece moved_piece = square_to_piece[m.from()];
 
     if (m.is_en_passant())
@@ -452,4 +405,68 @@ template <> struct std::formatter<Board> {
 
     return out;
   }
+};
+
+struct NetBoard : public Board {
+  Sides::Array<Accumulator> acc;
+  const PerspectiveNetwork &net;
+
+  constexpr virtual void add_piece(Side side, Piece piece,
+                                   Square square) override {
+    Board::add_piece(side, piece, square);
+    update_accumulators(net, square, piece, side);
+  }
+
+  constexpr virtual void remove_piece(Side side, Piece piece,
+                                      Square square) override {
+    Board::remove_piece(side, piece, square);
+    update_accumulators<false>(net, square, piece, side);
+  }
+
+  constexpr virtual void move_piece(Side side, Piece piece, Square from,
+                                    Square to) override {
+    Board::move_piece(side, piece, from, to);
+    update_accumulators<false>(net, from, piece, side);
+    update_accumulators(net, to, piece, side);
+  }
+
+  template <bool ADD = true>
+  void update_accumulators(const PerspectiveNetwork &net, Square square,
+                           Piece piece, Side side) {
+    auto op = ADD ? std::mem_fn(&Accumulator::operator+=)
+                  : std::mem_fn(&Accumulator::operator-=);
+
+    if (side == Sides::WHITE) {
+      op(acc[Sides::WHITE], net.get_hl_line(64 * piece.raw() + square.raw()));
+      op(acc[Sides::BLACK], net.get_hl_line(64 * (piece.raw() + Pieces::NUM) +
+                                            (square.raw() ^ 56)));
+    } else {
+      op(acc[Sides::WHITE],
+         net.get_hl_line(64 * (piece.raw() + Pieces::NUM) + square.raw()));
+      op(acc[Sides::BLACK],
+         net.get_hl_line(64 * piece.raw() + (square.raw() ^ 56)));
+    }
+  }
+
+  constexpr NetBoard(std::string_view fen_string, const PerspectiveNetwork &net)
+      : Board(fen_string), net(net) {
+    acc[Sides::WHITE] = acc[Sides::BLACK] = net.get_hl_biases();
+
+    std::ranges::for_each(square_to_piece | std::views::enumerate |
+                              std::views::filter([](auto p) {
+                                return get<1>(p) != Pieces::NONE;
+                              }),
+                          [&](auto p) {
+                            Square square(get<0>(p));
+                            Piece piece = get<1>(p);
+
+                            update_accumulators(net, square, piece,
+                                                pieces[Sides::WHITE][piece] &
+                                                        Bitboard(square)
+                                                    ? Sides::WHITE
+                                                    : Sides::BLACK);
+                          });
+  }
+
+  constexpr int eval() const { return net.compute(acc[stm], acc[~stm]); }
 };

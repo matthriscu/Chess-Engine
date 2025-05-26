@@ -62,18 +62,23 @@ public:
 
   const Accumulator &get_hl_biases() const { return hl_biases; }
 
-  static int activation(int16_t x) { return std::max<int>(x, 0); };
+  static constexpr int activation(int16_t x) {
+    int crelu = std::clamp<int>(x, 0, QA);
+    return crelu * crelu;
+  };
 
-  int compute(const std::array<int16_t, HL> &acc_stm,
-              const std::array<int16_t, HL> &acc_nstm) {
+  constexpr int compute(const Accumulator &acc_stm,
+                        const Accumulator &acc_nstm) const {
     auto compute_hl = [](const Accumulator &acc, const Accumulator &weights) {
       return std::inner_product(
           acc.state.begin(), acc.state.end(), weights.state.begin(), 0,
           std::plus{}, [](int16_t x, int16_t y) { return activation(x) * y; });
     };
 
-    return (compute_hl(acc_stm, output_weights[0]) +
-            compute_hl(acc_nstm, output_weights[1])) *
+    return ((compute_hl(acc_stm, output_weights[0]) +
+             compute_hl(acc_nstm, output_weights[1])) /
+                QA +
+            output_bias) *
            SCALE / (QA * QB);
   }
 };
