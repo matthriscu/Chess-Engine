@@ -1,5 +1,6 @@
 #pragma once
 
+#include "nnue.hpp"
 #include "perft.hpp"
 #include "searcher.hpp"
 #include <future>
@@ -13,10 +14,11 @@ template <typename T> constexpr T parse_number(std::string_view str) {
 }
 
 class UCIEngine {
-  Board position =
-      Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   Searcher searcher;
   std::future<void> searcher_future;
+  PerspectiveNetwork net = PerspectiveNetwork(NET_PATH);
+  NetBoard position =
+      NetBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", net);
 
 public:
   void process_command(std::string_view command) {
@@ -25,6 +27,7 @@ public:
     if (tokens[0] == "uci")
       std::puts("id name Sah Matt\n"
                 "id author Matei Hriscu\n"
+                "option name NNUE type string default nnue.bin\n"
                 "uciok");
     else if (tokens[0] == "setoption") {
       std::string name, value;
@@ -43,21 +46,24 @@ public:
       if (name == "Hash")
         searcher.resize_ttable(parse_number<size_t>(value) * (1 << 20) /
                                sizeof(TTNode));
+      if (name == "NNUE")
+        net = PerspectiveNetwork(value.c_str());
     } else if (tokens[0] == "isready")
       std::puts("readyok");
     else if (tokens[0].starts_with("position")) {
       size_t moves_list_start;
+      std::string fen;
 
       if (tokens[1] == "startpos") {
-        position =
-            Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         moves_list_start = 3;
       } else {
-        position =
-            Board(tokens | std::views::drop(2) | std::views::take(6) |
-                  std::views::join_with(' ') | std::ranges::to<std::string>());
+        fen = tokens | std::views::drop(2) | std::views::take(6) |
+              std::views::join_with(' ') | std::ranges::to<std::string>();
         moves_list_start = 9;
       }
+
+      new (&position) NetBoard(fen, net);
 
       searcher.clear_hashes();
       searcher.add_hash(position.zobrist);
@@ -108,7 +114,7 @@ public:
     else if (tokens[0] == "splitperft")
       splitperft(position, parse_number<int>(tokens[1]));
     else if (tokens[0] == "print")
-      std::println("{}", position);
+      std::println("{}", static_cast<Board>(position));
   }
 
   void play() {

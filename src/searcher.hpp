@@ -29,8 +29,8 @@ class Searcher {
                  std::chrono::system_clock::now() >= deadline));
   }
 
-  template <bool QSearch = false>
-  constexpr MoveList sorted_moves(const Board &board, int ply,
+  template <bool QSearch = false, typename BoardType>
+  constexpr MoveList sorted_moves(const BoardType &board, int ply,
                                   Move tt_move) const {
     static constexpr EnumArray<Piece::Literal, Pieces::Array<int>, 7>
         mvv_lva_lookup{
@@ -84,13 +84,14 @@ class Searcher {
     return moves;
   }
 
-  int qsearch(const Board &board, int ply, int alpha, int beta) {
+  template <typename BoardType>
+  int qsearch(const BoardType &board, int ply, int alpha, int beta) {
     if (check_hard_limit())
       return 0;
 
     ++nodes_searched;
 
-    int stand_pat = Eval::eval(board);
+    int stand_pat = board.eval();
 
     if (stand_pat >= beta)
       return stand_pat;
@@ -116,7 +117,7 @@ class Searcher {
 
     for (Move move : sorted_moves<true>(
              board, ply, node.has_value() ? node->best_move : Move())) {
-      Board copy = board;
+      BoardType copy = board;
       copy.make_move(move);
 
       if (copy.is_legal()) {
@@ -149,8 +150,8 @@ class Searcher {
     return best_value;
   }
 
-  template <bool PV>
-  int negamax(const Board &board, int depth, int ply = 0, int alpha = -INF,
+  template <bool PV, typename BoardType>
+  int negamax(const BoardType &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
     if (check_hard_limit())
       return 0;
@@ -166,7 +167,7 @@ class Searcher {
 
     std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
     const bool is_check = board.is_check();
-    int static_eval = Eval::eval(board);
+    int static_eval = board.eval();
 
     if constexpr (!PV) {
       if (node.has_value() && node->depth >= depth &&
@@ -184,7 +185,7 @@ class Searcher {
       if (!is_check || (board.side_occupancy[board.stm] !=
                         (board.pieces[board.stm][Pieces::PAWN] |
                          board.pieces[board.stm][Pieces::KING]))) {
-        Board copy = board;
+        BoardType copy = board;
         copy.make_null_move();
 
         int nmp_value =
@@ -205,7 +206,7 @@ class Searcher {
 
     for (auto [i, move] : std::views::enumerate(sorted_moves(
              board, ply, node.has_value() ? node->best_move : Move()))) {
-      Board copy = board;
+      BoardType copy = board;
       copy.make_move(move);
 
       int value = -INF;
@@ -292,9 +293,9 @@ public:
 
   constexpr void add_hash(uint64_t hash) { hashes.push_back(hash); }
 
-  template <bool INFO = true>
+  template <bool INFO = true, typename BoardType>
   std::pair<Move, int16_t>
-  search(const Board &board,
+  search(const BoardType &board,
          std::optional<std::chrono::system_clock::duration> duration_opt,
          std::optional<int64_t> soft_node_limit_opt,
          std::optional<int64_t> hard_node_limit_opt,

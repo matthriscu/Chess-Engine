@@ -1,5 +1,6 @@
 #pragma once
 #include "board.hpp"
+#include "nnue.hpp"
 
 template <size_t SIZE> struct NibbleArray {
   std::array<uint8_t, (SIZE + 1) / 2> data;
@@ -54,4 +55,5 @@ struct Game {
   std::vector<std::pair<ViriMove, int16_t>> moves;
 };
 
-void datagen(int num_threads, int games);
+void datagen(int num_threads, int games, const PerspectiveNetwork &net,
+             const char *out_folder);

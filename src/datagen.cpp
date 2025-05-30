@@ -1,11 +1,14 @@
 #include "datagen.hpp"
+#include "nnue.hpp"
 #include "uciengine.hpp"
+#include <filesystem>
 #include <fstream>
 #include <random>
 #include <thread>
 
-Game play_datagen_game() {
-  Board board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+Game play_datagen_game(const PerspectiveNetwork &net) {
+  NetBoard board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                 net);
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -17,14 +20,14 @@ Game play_datagen_game() {
     MoveList moves = board.pseudolegal_moves();
     int legal_moves = std::partition(moves.begin(), moves.end(),
                                      [&](const Move &move) {
-                                       Board copy = board;
+                                       NetBoard copy = board;
                                        copy.make_move(move);
                                        return copy.is_legal();
                                      }) -
                       moves.begin();
 
     if (legal_moves == 0)
-      return play_datagen_game();
+      return play_datagen_game(net);
     else {
       std::uniform_int_distribution<> dist(0, legal_moves - 1);
       board.make_move(moves[dist(gen)]);
@@ -67,9 +70,6 @@ Game play_datagen_game() {
 
 void print_game(const Game &game, std::ofstream &out_file) {
   static constexpr int zero = 0;
-  static std::mutex mtx;
-
-  std::lock_guard lock(mtx);
 
   out_file.write(reinterpret_cast<const char *>(&game.header),
                  sizeof(game.header));
@@ -80,17 +80,24 @@ void print_game(const Game &game, std::ofstream &out_file) {
   out_file.write(reinterpret_cast<const char *>(&zero), sizeof(zero));
 }
 
-void datagen_thread(int games, std::ofstream &out_file) {
+void datagen_thread(int thread_id, const PerspectiveNetwork &net, int games,
+                    const char *out_folder) {
+  std::ofstream out_file(std::string(out_folder) + "/data" +
+                             std::to_string(thread_id) + ".viri",
+                         std::ios::binary);
+
   for (int i = 0; i < games; ++i)
-    print_game(play_datagen_game(), out_file);
+    print_game(play_datagen_game(net), out_file);
 }
 
-void datagen(int num_threads, int games) {
-  std::ofstream out_file("datagen.viri", std::ios::binary);
+void datagen(int num_threads, int games, const PerspectiveNetwork &net,
+             const char *out_folder) {
   std::vector<std::jthread> threads;
 
+  std::filesystem::create_directory(out_folder);
+
   for (int i = 0; i < num_threads; ++i)
-    threads.emplace_back(datagen_thread,
+    threads.emplace_back(datagen_thread, i, net,
                          games / num_threads + (i < games % num_threads),
-                         std::ref(out_file));
+                         out_folder);
 }
