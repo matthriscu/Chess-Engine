@@ -1,11 +1,10 @@
 #pragma once
 
+#include "tunable_params.hpp"
 #include <array>
 #include <cstdint>
 #include <fstream>
 #include <numeric>
-
-inline constexpr int HL = 64, SCALE = 400, QA = 255, QB = 64;
 
 struct Accumulator {
   std::array<int16_t, HL> state;

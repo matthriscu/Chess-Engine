@@ -55,4 +55,5 @@ struct Game {
   std::vector<std::pair<ViriMove, int16_t>> moves;
 };
 
-void datagen(int num_threads, int games, const PerspectiveNetwork &net);
+void datagen(int num_threads, int games, const PerspectiveNetwork &net,
+             const char *out_folder);

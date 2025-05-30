@@ -27,6 +27,7 @@ public:
     if (tokens[0] == "uci")
       std::puts("id name Sah Matt\n"
                 "id author Matei Hriscu\n"
+                "option name NNUE type string default nnue.bin\n"
                 "uciok");
     else if (tokens[0] == "setoption") {
       std::string name, value;
@@ -45,6 +46,8 @@ public:
       if (name == "Hash")
         searcher.resize_ttable(parse_number<size_t>(value) * (1 << 20) /
                                sizeof(TTNode));
+      if (name == "NNUE")
+        net = PerspectiveNetwork(value.c_str());
     } else if (tokens[0] == "isready")
       std::puts("readyok");
     else if (tokens[0].starts_with("position")) {
