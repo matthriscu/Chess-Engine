@@ -4,6 +4,7 @@
 #include "tunable_params.hpp"
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <numeric>
 
@@ -53,7 +54,7 @@ public:
   std::array<Accumulator, 2> output_weights;
   int16_t output_bias;
 
-  PerspectiveNetwork(const char *path) {
+  PerspectiveNetwork(const std::filesystem::path &path) {
     std::ifstream in(path, std::ios::binary);
     in.read((char *)this, sizeof(*this));
   }

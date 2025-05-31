@@ -2,7 +2,8 @@
 #include "square.hpp"
 #include <cstdint>
 
-static constexpr Squares::Array<Pieces::Array<Sides::Array<uint64_t>>>
+namespace Zobrist {
+inline constexpr Squares::Array<Pieces::Array<Sides::Array<uint64_t>>>
     square_rands{0x94c2ef8841145504, 0x74c9924838face5d, 0x24b952a22bd51f44,
                  0xfa9619fb175542f,  0x253cb2404da1d178, 0xd2b3a4004d467811,
                  0x30d6f50bc9201bb4, 0xc7e7b253a34870a2, 0x1df6642e6b962812,
@@ -260,13 +261,14 @@ static constexpr Squares::Array<Pieces::Array<Sides::Array<uint64_t>>>
                  0xdddefd83070787da, 0x403104f927a7e788, 0x4ac8ea18b0cf1609,
                  0x50a20c9b2ac57db1, 0x2b8770913539b85d, 0xcf496c1388ad7e84};
 
-static constexpr uint64_t stm_rand = 0x469a8453908236f;
+inline constexpr uint64_t stm_rand = 0x469a8453908236f;
 
-static constexpr Sides::Array<std::array<uint64_t, 2>> castling_rands{
+inline constexpr Sides::Array<std::array<uint64_t, 2>> castling_rands{
     0x24700a5fb94e062e, 0xc2e28bc9a5335e0e, 0x388e41bc9cee55c6,
     0x72bcd3908568bb34};
 
-static constexpr std::array<uint64_t, 8> ep_rands{
+inline constexpr std::array<uint64_t, 8> ep_rands{
     0x51386ecce05335b9, 0x2b076463851c7805, 0xe820b0a867247c8f,
     0xb006d52145f897f3, 0x9ea4d0bc8d58ad78, 0xd503bfa9e1c20de6,
     0x6d2daf158ca8ffb9, 0x2490fd654666fd30};
+}; // namespace Zobrist

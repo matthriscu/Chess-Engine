@@ -87,7 +87,7 @@ constexpr Bitboard attacks_bb<Pieces::QUEEN>(Square square, Bitboard occupied) {
          attacks_bb<Pieces::BISHOP>(square, occupied);
 }
 
-constexpr Bitboard attacks_bb(Piece p, Square square, Bitboard occupied = 0) {
+constexpr Bitboard attacks_bb(Piece p, Square square, Bitboard occupied) {
   switch (p) {
   case Pieces::KNIGHT:
     return attacks_bb<Pieces::KNIGHT>(square, occupied);

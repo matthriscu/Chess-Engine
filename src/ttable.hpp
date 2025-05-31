@@ -46,6 +46,11 @@ public:
     return std::nullopt;
   }
 
+  constexpr int hashfull() const {
+    return std::count_if(table.begin(), table.begin() + 1000,
+                         [](const TTNode &node) { return node.hash != 0; });
+  }
+
 private:
   std::size_t size;
   std::vector<TTNode> table;
