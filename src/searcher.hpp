@@ -1,4 +1,3 @@
-#include "board.hpp"
 #include "eval.hpp"
 #include "move.hpp"
 #include "ttable.hpp"
@@ -266,7 +265,7 @@ class Searcher {
     if (best_value == -INF)
       best_value = board.is_check() ? ply - CHECKMATE : 0;
 
-    if (ply == 0 && best_move != Move{})
+    if (ply == 0)
       best_root_move = best_move;
 
     ttable.insert(board.zobrist, best_move, best_value, depth, tt_type, ply);
@@ -337,9 +336,9 @@ public:
           break;
 
         if (current <= alpha)
-          alpha -= delta;
+          alpha = std::max(alpha - delta, -INF);
         else if (current >= beta)
-          beta += delta;
+          beta = std::min(beta + delta, INF);
         else {
           best_root_value = current;
           break;
@@ -353,9 +352,9 @@ public:
 
       std::optional<int> moves_to_mate;
 
-      if (best_root_value + CHECKMATE <= MAX_PLY)
+      if (best_root_value <= -CHECKMATE_THRESHOLD)
         moves_to_mate = -(CHECKMATE + best_root_value + 1) / 2;
-      else if (CHECKMATE - best_root_value <= MAX_PLY)
+      else if (best_root_value >= CHECKMATE_THRESHOLD)
         moves_to_mate = (CHECKMATE - best_root_value + 1) / 2;
 
       if (INFO) {
