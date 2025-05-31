@@ -17,4 +17,4 @@ static constexpr int64_t DATAGEN_SOFT_NODE_LIMIT = 5000;
 static constexpr int64_t DATAGEN_HARD_NODE_LIMIT =
     DATAGEN_SOFT_NODE_LIMIT * 100;
 static constexpr const char *NET_PATH = "nnue.bin";
-static constexpr int HL = 64, SCALE = 400, QA = 255, QB = 64;
+static constexpr int HL = 128, SCALE = 400, QA = 255, QB = 64;

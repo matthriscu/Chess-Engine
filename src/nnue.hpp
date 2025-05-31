@@ -1,5 +1,6 @@
 #pragma once
 
+#include "assert.h"
 #include "tunable_params.hpp"
 #include <array>
 #include <cstdint>
