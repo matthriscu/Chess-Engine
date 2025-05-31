@@ -1,3 +1,5 @@
+#pragma once
+
 #include "eval.hpp"
 #include "move.hpp"
 #include "ttable.hpp"
@@ -29,6 +31,7 @@ class Searcher {
   }
 
   template <bool QSearch = false, typename BoardType>
+    requires std::derived_from<BoardType, Board>
   constexpr MoveList sorted_moves(const BoardType &board, int ply,
                                   Move tt_move) const {
     static constexpr EnumArray<Piece::Literal, Pieces::Array<int>, 7>
@@ -53,25 +56,24 @@ class Searcher {
 
     std::array<ScoredMove, MAX_MOVES> scored_moves;
 
-    std::transform(
-        moves.begin(), moves.end(), scored_moves.begin(), [&](Move move) {
-          static constexpr int CAPTURE_BASE = 1'000'000'000,
-                               KILLER_SCORE = CAPTURE_BASE;
-          uint32_t score;
+    std::ranges::transform(moves, scored_moves.begin(), [&](Move move) {
+      static constexpr int CAPTURE_BASE = 1'000'000'000,
+                           KILLER_SCORE = CAPTURE_BASE;
+      uint32_t score;
 
-          if (move == tt_move)
-            score = std::numeric_limits<uint32_t>::max();
-          else if (move.is_capture())
-            score = CAPTURE_BASE +
-                    mvv_lva_lookup[board.square_to_piece[move.to()]]
-                                  [board.square_to_piece[move.from()]];
-          else if (std::ranges::contains(killer_moves[ply], move))
-            score = KILLER_SCORE;
-          else
-            score = history[move.from()][move.to()];
+      if (move == tt_move)
+        score = std::numeric_limits<uint32_t>::max();
+      else if (move.is_capture())
+        score = CAPTURE_BASE +
+                mvv_lva_lookup[board.square_to_piece[move.to()]]
+                              [board.square_to_piece[move.from()]];
+      else if (std::ranges::contains(killer_moves[ply], move))
+        score = KILLER_SCORE;
+      else
+        score = history[move.from()][move.to()];
 
-          return ScoredMove(score, move);
-        });
+      return ScoredMove(score, move);
+    });
 
     std::stable_sort(scored_moves.begin(), scored_moves.begin() + moves.size(),
                      std::greater<>{});
@@ -83,7 +85,8 @@ class Searcher {
     return moves;
   }
 
-  template <typename BoardType>
+  template <bool PV, typename BoardType>
+    requires std::derived_from<BoardType, Board>
   int qsearch(const BoardType &board, int ply, int alpha, int beta) {
     if (check_hard_limit())
       return 0;
@@ -102,7 +105,7 @@ class Searcher {
 
     std::optional<TTNode> node = ttable.lookup(board.zobrist, ply);
 
-    if (node.has_value() &&
+    if (!PV && node.has_value() &&
         (node->type == TTNode::Type::EXACT ||
          (node->type == TTNode::Type::UPPERBOUND && node->value <= alpha) ||
          (node->type == TTNode::Type::LOWERBOUND && node->value >= beta)))
@@ -114,13 +117,13 @@ class Searcher {
 
     hashes.push_back(board.zobrist);
 
-    for (Move move : sorted_moves<true>(
-             board, ply, node.has_value() ? node->best_move : Move())) {
+    for (Move move :
+         sorted_moves<true>(board, ply, node ? node->best_move : Move{})) {
       BoardType copy = board;
       copy.make_move(move);
 
       if (copy.is_legal()) {
-        int value = -qsearch(copy, ply + 1, -beta, -alpha);
+        int value = -qsearch<PV>(copy, ply + 1, -beta, -alpha);
 
         if (cancel_search) {
           hashes.pop_back();
@@ -150,13 +153,14 @@ class Searcher {
   }
 
   template <bool PV, typename BoardType>
+    requires std::derived_from<BoardType, Board>
   int negamax(const BoardType &board, int depth, int ply = 0, int alpha = -INF,
               int beta = INF) {
     if (check_hard_limit())
       return 0;
 
     if (depth == 0)
-      return qsearch(board, ply, alpha, beta);
+      return qsearch<PV>(board, ply, alpha, beta);
 
     ++nodes_searched;
 
@@ -199,21 +203,17 @@ class Searcher {
     Move best_move{};
     int best_value = -INF;
     TTNode::Type tt_type = TTNode::Type::UPPERBOUND;
-    bool skip_quiets = false;
 
     hashes.push_back(board.zobrist);
 
-    for (auto [i, move] : std::views::enumerate(sorted_moves(
-             board, ply, node.has_value() ? node->best_move : Move()))) {
+    for (auto [i, move] : std::views::enumerate(
+             sorted_moves(board, ply, node ? node->best_move : Move()))) {
       BoardType copy = board;
       copy.make_move(move);
 
       int value = -INF;
 
       if (copy.is_legal()) {
-        if (skip_quiets && move.is_quiet())
-          continue;
-
         // LMR
         if (depth >= LMR_MIN_DEPTH && i > (ply == 0) && !is_check) {
           int reduction = LMR_A + LMR_B * std::log(depth) *
@@ -265,7 +265,7 @@ class Searcher {
     if (best_value == -INF)
       best_value = board.is_check() ? ply - CHECKMATE : 0;
 
-    if (ply == 0)
+    if (ply == 0 && best_move != Move{})
       best_root_move = best_move;
 
     ttable.insert(board.zobrist, best_move, best_value, depth, tt_type, ply);
@@ -286,14 +286,17 @@ public:
     ttable = {};
   }
 
-  constexpr std::vector<uint64_t> get_hashes() const { return hashes; }
-
   constexpr void clear_hashes() { hashes.clear(); }
+
+  constexpr bool check_threefold(uint64_t hash) const {
+    return std::ranges::count(hashes, hash) >= 3;
+  }
 
   constexpr void add_hash(uint64_t hash) { hashes.push_back(hash); }
 
   template <bool INFO = true, typename BoardType>
-  std::pair<Move, int16_t>
+    requires std::derived_from<BoardType, Board>
+  constexpr std::pair<Move, int16_t>
   search(const BoardType &board,
          std::optional<std::chrono::system_clock::duration> duration_opt,
          std::optional<int64_t> soft_node_limit_opt,
@@ -362,13 +365,15 @@ public:
                            std::chrono::system_clock::now() - start)
                            .count();
 
-        std::println("info depth {} nodes {} nps {} score {} time {} pv {}",
-                     depth, nodes_searched,
-                     static_cast<int>(1000 * nodes_searched / (time_ms + 1)),
-                     moves_to_mate.has_value()
-                         ? std::string("mate ") + std::to_string(*moves_to_mate)
-                         : std::string("cp ") + std::to_string(best_root_value),
-                     time_ms, best_root_move.uci());
+        std::println(
+            "info depth {} nodes {} nps {} hashfull {} score {} time {} pv {}",
+            depth, nodes_searched,
+            static_cast<int>(1000 * nodes_searched / (time_ms + 1)),
+            ttable.hashfull(),
+            moves_to_mate.has_value()
+                ? std::string("mate ") + std::to_string(*moves_to_mate)
+                : std::string("cp ") + std::to_string(best_root_value),
+            time_ms, best_root_move.uci());
       }
     }
 

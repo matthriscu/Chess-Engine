@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nnue.hpp"
+#include "datagen.hpp"
 #include "perft.hpp"
 #include "searcher.hpp"
 #include <future>
@@ -13,67 +13,55 @@ template <typename T> constexpr T parse_number(std::string_view str) {
   return result;
 }
 
+template <typename BoardType>
+  requires std::derived_from<BoardType, Board>
 class UCIEngine {
   Searcher searcher;
   std::future<void> searcher_future;
-  PerspectiveNetwork net = PerspectiveNetwork(NET_PATH);
-  NetBoard position =
-      NetBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", net);
+  BoardType position;
 
 public:
+  template <typename... Args>
+  UCIEngine(Args &&...args) : position(std::forward<Args>(args)...) {}
+
   void process_command(std::string_view command) {
+    using std::literals::string_literals::operator""s;
     std::vector<std::string_view> tokens = string_tokenizer(command);
 
     if (tokens[0] == "uci")
       std::puts("id name Sah Matt\n"
                 "id author Matei Hriscu\n"
-                "option name NNUE type string default nnue.bin\n"
+                "option name Hash type spin default 64 min 1 max 16384\n"
                 "uciok");
     else if (tokens[0] == "setoption") {
-      std::string name, value;
+      auto value_it = std::ranges::find(tokens, "value");
 
-      bool name_done = false;
-
-      for (std::string_view token : std::views::drop(tokens, 2)) {
-        if (token == "value")
-          name_done = true;
-        else if (!name_done)
-          name += token;
-        else
-          value += token;
-      }
+      std::string name = join_tokens(std::span{tokens.begin() + 2, value_it}),
+                  value = join_tokens(std::span{value_it + 1, tokens.end()});
 
       if (name == "Hash")
         searcher.resize_ttable(parse_number<size_t>(value) * (1 << 20) /
                                sizeof(TTNode));
-      if (name == "NNUE")
-        net = PerspectiveNetwork(value.c_str());
     } else if (tokens[0] == "isready")
       std::puts("readyok");
     else if (tokens[0].starts_with("position")) {
-      size_t moves_list_start;
-      std::string fen;
-
-      if (tokens[1] == "startpos") {
-        fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        moves_list_start = 3;
-      } else {
-        fen = tokens | std::views::drop(2) | std::views::take(6) |
-              std::views::join_with(' ') | std::ranges::to<std::string>();
-        moves_list_start = 9;
-      }
-
-      new (&position) NetBoard(fen, net);
+      position = NetBoard(
+          tokens[1] == "startpos"
+              ? std::string(STARTPOS)
+              : join_tokens(tokens | std::views::drop(2) | std::views::take(6),
+                            ' '),
+          position.net);
 
       searcher.clear_hashes();
       searcher.add_hash(position.zobrist);
 
       for (std::string_view move_str :
-           std::views::drop(tokens, moves_list_start)) {
+           std::views::drop_while(tokens, [](std::string_view token) {
+             return token != "moves";
+           }) | std::views::drop(1)) {
         position.make_move(position.pseudolegal_moves().get_matching_move(
             move_str.substr(0, 2), move_str.substr(2, 2),
             move_str.size() == 5 ? Piece(move_str.back()) : Piece()));
-
         searcher.add_hash(position.zobrist);
       }
     } else if (tokens[0] == "go") {
@@ -115,6 +103,9 @@ public:
       splitperft(position, parse_number<int>(tokens[1]));
     else if (tokens[0] == "print")
       std::println("{}", static_cast<Board>(position));
+    else if (tokens[0] == "datagen")
+      datagen(parse_number<int>(tokens[1]), parse_number<int>(tokens[2]),
+              position, tokens[3]);
   }
 
   void play() {

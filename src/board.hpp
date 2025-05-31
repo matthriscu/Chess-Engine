@@ -64,13 +64,13 @@ struct Board {
   constexpr virtual void add_piece(Side side, Piece piece, Square square) {
     pieces[side][piece] |= Bitboard(square);
     square_to_piece[square] = piece;
-    zobrist ^= square_rands[square][piece][side];
+    zobrist ^= Zobrist::square_rands[square][piece][side];
   }
 
   constexpr virtual void remove_piece(Side side, Piece piece, Square square) {
     pieces[side][piece] &= ~Bitboard(square);
     square_to_piece[square] = Pieces::NONE;
-    zobrist ^= square_rands[square][piece][side];
+    zobrist ^= Zobrist::square_rands[square][piece][side];
   }
 
   constexpr virtual void move_piece(Side side, Piece piece, Square from,
@@ -78,7 +78,8 @@ struct Board {
     pieces[side][piece] ^= Bitboard(from) | Bitboard(to);
     square_to_piece[from] = Pieces::NONE;
     square_to_piece[to] = piece;
-    zobrist ^= square_rands[from][piece][side] ^ square_rands[to][piece][side];
+    zobrist ^= Zobrist::square_rands[from][piece][side] ^
+               Zobrist::square_rands[to][piece][side];
   }
 
   constexpr void make_move(Move m) {
@@ -97,27 +98,27 @@ struct Board {
       for (int i = 0; i < 2; ++i)
         if (castling_rights[stm][i]) {
           castling_rights[stm][i] = false;
-          zobrist ^= castling_rands[stm][i];
+          zobrist ^= Zobrist::castling_rands[stm][i];
         }
 
     if (castling_rights[Sides::WHITE][0] &&
         (m.from() == Squares::H1 || m.to() == Squares::H1)) {
       castling_rights[Sides::WHITE][0] = false;
-      zobrist ^= castling_rands[Sides::WHITE][0];
+      zobrist ^= Zobrist::castling_rands[Sides::WHITE][0];
     } else if (castling_rights[Sides::WHITE][1] &&
                (m.from() == Squares::A1 || m.to() == Squares::A1)) {
       castling_rights[Sides::WHITE][1] = false;
-      zobrist ^= castling_rands[Sides::WHITE][1];
+      zobrist ^= Zobrist::castling_rands[Sides::WHITE][1];
     }
 
     if (castling_rights[Sides::BLACK][0] &&
         (m.from() == Squares::H8 || m.to() == Squares::H8)) {
       castling_rights[Sides::BLACK][0] = false;
-      zobrist ^= castling_rands[Sides::BLACK][0];
+      zobrist ^= Zobrist::castling_rands[Sides::BLACK][0];
     } else if (castling_rights[Sides::BLACK][1] &&
                (m.from() == Squares::A8 || m.to() == Squares::A8)) {
       castling_rights[Sides::BLACK][1] = false;
-      zobrist ^= castling_rands[Sides::BLACK][1];
+      zobrist ^= Zobrist::castling_rands[Sides::BLACK][1];
     }
 
     if (m.is_promotion()) {
@@ -137,7 +138,7 @@ struct Board {
     }
 
     if (ep_square != Squares::NONE)
-      zobrist ^= ep_rands[ep_square.file()];
+      zobrist ^= Zobrist::ep_rands[ep_square.file()];
 
     ep_square = Squares::NONE;
 
@@ -147,7 +148,7 @@ struct Board {
 
       if (pieces[~stm][Pieces::PAWN] & pawn_attacks[stm][ep_square_candidate]) {
         ep_square = ep_square_candidate;
-        zobrist ^= ep_rands[ep_square.file()];
+        zobrist ^= Zobrist::ep_rands[ep_square.file()];
       }
     }
 
@@ -162,17 +163,17 @@ struct Board {
     halfmove_clock =
         moved_piece == Pieces::PAWN || m.is_capture() ? 0 : halfmove_clock + 1;
     stm = ~stm;
-    zobrist ^= stm_rand;
+    zobrist ^= Zobrist::stm_rand;
   }
 
   constexpr void make_null_move() {
     if (ep_square != Squares::NONE)
-      zobrist ^= ep_rands[ep_square.file()];
+      zobrist ^= Zobrist::ep_rands[ep_square.file()];
 
     ep_square = Squares::NONE;
 
     stm = ~stm;
-    zobrist ^= stm_rand;
+    zobrist ^= Zobrist::stm_rand;
 
     halfmove_clock = 0;
   }
@@ -347,19 +348,19 @@ struct Board {
         Side side = pieces[Sides::WHITE][piece] & Bitboard(square)
                         ? Sides::WHITE
                         : Sides::BLACK;
-        hash ^= square_rands[square][piece][side];
+        hash ^= Zobrist::square_rands[square][piece][side];
       }
 
     for (Side side : Sides::ALL)
       for (int i = 0; i < 2; ++i)
         if (castling_rights[side][i])
-          hash ^= castling_rands[side][i];
+          hash ^= Zobrist::castling_rands[side][i];
 
     if (ep_square != Squares::NONE)
-      hash ^= ep_rands[ep_square.file()];
+      hash ^= Zobrist::ep_rands[ep_square.file()];
 
     if (stm == Sides::BLACK)
-      hash ^= stm_rand;
+      hash ^= Zobrist::stm_rand;
 
     return hash;
   }
@@ -409,7 +410,7 @@ template <> struct std::formatter<Board> {
 
 struct NetBoard : public Board {
   Sides::Array<Accumulator> acc;
-  const PerspectiveNetwork &net;
+  std::reference_wrapper<const PerspectiveNetwork> net;
 
   constexpr virtual void add_piece(Side side, Piece piece,
                                    Square square) override {
@@ -433,8 +434,8 @@ struct NetBoard : public Board {
   template <bool ADD = true>
   void update_accumulators(const PerspectiveNetwork &net, Square square,
                            Piece piece, Side side) {
-    auto op = ADD ? std::mem_fn(&Accumulator::operator+=)
-                  : std::mem_fn(&Accumulator::operator-=);
+    auto op = std::mem_fn(ADD ? &Accumulator::operator+=
+                  : &Accumulator::operator-=);
 
     if (side == Sides::WHITE) {
       op(acc[Sides::WHITE], net.get_hl_line(64 * piece.raw() + square.raw()));
@@ -468,5 +469,5 @@ struct NetBoard : public Board {
                           });
   }
 
-  constexpr int eval() const { return net.compute(acc[stm], acc[~stm]); }
+  constexpr int eval() const { return net.get().compute(acc[stm], acc[~stm]); }
 };
