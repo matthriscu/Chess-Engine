@@ -2,11 +2,11 @@
 
 #include "board.hpp"
 
-constexpr int perft(const Board &board, int depth) {
+constexpr int64_t perft(const Board &board, int depth) {
   if (depth == 0)
     return 1;
 
-  int ans = 0;
+  int64_t ans = 0;
 
   for (Move m : board.pseudolegal_moves()) {
     Board copy = board;
