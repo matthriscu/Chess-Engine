@@ -1,3 +1,4 @@
+// Source: https://github.com/Gigantua/Chess_Movegen
 #pragma once
     
 #include "piece.hpp"
